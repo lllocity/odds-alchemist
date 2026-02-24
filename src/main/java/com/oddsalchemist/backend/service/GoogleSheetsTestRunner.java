@@ -20,13 +20,16 @@ public class GoogleSheetsTestRunner implements CommandLineRunner {
 
     private final Sheets sheetsService;
     private final String spreadsheetId;
+    private final OddsScrapingService scrapingService;
 
     // Configで生成したSheetsインスタンスと、ymlのIDをDI（依存性注入）で受け取る
     public GoogleSheetsTestRunner(
             Sheets sheetsService,
-            @Value("${google.sheets.spreadsheet-id}") String spreadsheetId) {
+            @Value("${google.sheets.spreadsheet-id}") String spreadsheetId,
+            OddsScrapingService scrapingService) {
         this.sheetsService = sheetsService;
         this.spreadsheetId = spreadsheetId;
+        this.scrapingService = scrapingService;
     }
 
     @Override
@@ -56,5 +59,8 @@ public class GoogleSheetsTestRunner implements CommandLineRunner {
                 .execute();
 
         logger.info("=== テストデータの書き込みが完了しました ===");
+
+        // スクレイピングの通信テスト
+        scrapingService.testFetch("https://db.netkeiba.com/");
     }
 }
