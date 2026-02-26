@@ -17,61 +17,85 @@ public class RaceOddsParser {
 
     private static final Logger logger = LoggerFactory.getLogger(RaceOddsParser.class);
 
-    /**
-     * HTML文字列からオッズ情報を抽出します。
-     * ※ 注意: 以下のCSSセレクタ（".odds-table .horse-row" など）は仮のものです。
-     * 実際にスクレイピングするサイトのDOM構造に合わせて書き換えてください。
-     */
-    private static final String SELECTOR_ROW = ".odds-table .horse-row";
-    private static final String SELECTOR_HORSE_NUMBER = ".horse-number";
-    private static final String SELECTOR_HORSE_NAME = ".horse-name";
-    private static final String SELECTOR_WIN_ODDS = ".win-odds";
-    private static final String SELECTOR_PLACE_ODDS = ".place-odds";
-
     public List<OddsData> parse(String html) {
         List<OddsData> oddsList = new ArrayList<>();
         Document doc = Jsoup.parse(html);
 
-        Elements rows = doc.select(SELECTOR_ROW);
+        // スポナビのすべての行を取得
+        Elements rows = doc.select("tr");
 
         for (Element row : rows) {
             try {
-                String horseNumber = row.select(SELECTOR_HORSE_NUMBER).text().trim();
-                String horseName = row.select(SELECTOR_HORSE_NAME).text().trim();
-                String winOddsStr = row.select(SELECTOR_WIN_ODDS).text().trim();
-                String placeOddsStr = row.select(SELECTOR_PLACE_ODDS).text().trim();
+                Elements cells = row.select("td");
+                if (cells.size() < 4) continue;
 
-                Double winOdds = parseOdds(winOddsStr);
-                Double[] placeOdds = parsePlaceOdds(placeOddsStr);
+                // 1. 馬番を探す（1〜18の数字が単独で含まれるセル）
+                String horseNumber = "";
+                int nameIndex = -1;
+                for (int i = 0; i < Math.min(cells.size(), 3); i++) {
+                    String text = cells.get(i).text().trim();
+                    if (text.matches("\\d+")) {
+                        horseNumber = text;
+                        nameIndex = i + 1; // 馬番の隣が馬名である可能性が高い
+                        break;
+                    }
+                }
+                if (horseNumber.isEmpty()) continue;
 
-                oddsList.add(new OddsData(horseNumber, horseName, winOdds, placeOdds[0], placeOdds[1]));
+                // 2. 馬名を取得
+                String horseName = cells.get(nameIndex).text().trim();
+                // 馬名にリンクがある場合は、リンクのテキストを優先
+                Element nameLink = cells.get(nameIndex).selectFirst("a");
+                if (nameLink != null) horseName = nameLink.text().trim();
+
+                // 3. オッズを「数値.数値」のパターンで探す
+                Double winOdds = null;
+                Double placeMin = null;
+                Double placeMax = null;
+
+                for (Element cell : cells) {
+                    String text = cell.text().trim();
+                    // 単勝オッズ (例: 5.4)
+                    if (text.matches("^\\d+\\.\\d+$")) {
+                        if (winOdds == null) winOdds = parseDouble(text);
+                    } 
+                    // 複勝オッズ (例: 1.2-1.5 や 1.2 - 1.5)
+                    else if (text.contains("-") && text.matches(".*\\d+\\.\\d+.*")) {
+                        Double[] p = parsePlace(text);
+                        if (p[0] != null) {
+                            placeMin = p[0];
+                            placeMax = p[1];
+                        }
+                    }
+                }
+
+                // 最低限、馬番と単勝オッズがあればリストに追加
+                if (!horseNumber.isEmpty() && winOdds != null) {
+                    oddsList.add(new OddsData(horseNumber, horseName, winOdds, placeMin, placeMax));
+                }
             } catch (Exception e) {
-                // 一部の行で抽出に失敗しても全体を止めずにスキップ
-                logger.warn("Failed to parse row. html fragment: {}", row.outerHtml(), e);
+                // スキップ
             }
         }
+
+        logger.info("Parse complete. Found {} valid horse rows. Total scanned: {}", oddsList.size(), rows.size());
         return oddsList;
     }
 
-    private Double parseOdds(String oddsStr) {
-        if (oddsStr == null || oddsStr.isEmpty() || oddsStr.contains("---")) {
-            return null;
-        }
+    private Double parseDouble(String s) {
         try {
-            return Double.parseDouble(oddsStr);
-        } catch (NumberFormatException e) {
+            return Double.parseDouble(s.replaceAll("[^0-9.]", ""));
+        } catch (Exception e) {
             return null;
         }
     }
 
-    private Double[] parsePlaceOdds(String placeOddsStr) {
-        Double[] result = new Double[]{null, null};
-        if (placeOddsStr == null || placeOddsStr.isEmpty()) return result;
-
-        String[] parts = placeOddsStr.split("-");
-        if (parts.length >= 1) result[0] = parseOdds(parts[0].trim());
-        if (parts.length >= 2) result[1] = parseOdds(parts[1].trim());
-        
-        return result;
+    private Double[] parsePlace(String s) {
+        Double[] res = new Double[]{null, null};
+        // 1.2-1.5 などを分割
+        String[] parts = s.split("-");
+        if (parts.length >= 1) res[0] = parseDouble(parts[0]);
+        if (parts.length >= 2) res[1] = parseDouble(parts[1]);
+        return res;
     }
 }

@@ -31,8 +31,9 @@ public class OddsSyncService {
 
     /**
      * 対象URLからオッズを取得し、スプレッドシートへ追記します。
+     * @return スプレッドシートに書き込んだデータ件数
      */
-    public void fetchAndSaveOdds(String targetUrl, String range) throws IOException {
+    public int fetchAndSaveOdds(String targetUrl, String range) throws IOException {
         logger.info("Start fetching odds from URL: {}", targetUrl);
 
         // 1. HTMLの取得
@@ -43,7 +44,7 @@ public class OddsSyncService {
 
         if (oddsList.isEmpty()) {
             logger.warn("No odds data found. URL: {}", targetUrl);
-            return;
+            return 0; // 変更点: 0件であることをコントローラーに伝える
         }
 
         // 3. スプレッドシート用の2次元配列に変換
@@ -52,6 +53,8 @@ public class OddsSyncService {
         // 4. スプレッドシートへ書き込み
         sheetsService.appendData(range, values);
         logger.info("Successfully saved {} rows to spreadsheet.", values.size());
+
+        return values.size(); // 変更点: 保存した件数を返す
     }
 
     private List<List<Object>> convertToSheetData(List<OddsData> oddsList) {

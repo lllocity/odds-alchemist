@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 export default function Home() {
   const [url, setUrl] = useState('');
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleStartMonitoring = async (e: React.FormEvent) => {
@@ -12,18 +12,32 @@ export default function Home() {
     if (!url) return;
 
     setIsLoading(true);
-    setStatus('バックエンドへリクエストを送信中...');
+    setStatus({ type: 'info', message: 'バックエンドへリクエストを送信中...' });
 
     try {
-      // ※ここはStep 12で実際のバックエンドAPIを呼び出すように書き換えます
-      // 今回はUIの動作確認のためのダミー遅延処理です
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setStatus(`「${url}」の監視を開始しました。`);
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+      // Spring BootのAPIへPOSTリクエストを送信
+      const response = await fetch(`${apiBaseUrl}/api/odds/fetch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || '通信エラーが発生しました');
+      }
+
+      setStatus({ type: 'success', message: `成功: ${data.message}` });
+      setUrl('');
     } catch (error) {
-      setStatus('エラーが発生しました。バックエンドの接続を確認してください。');
+      const errorMessage = error instanceof Error ? error.message : '予期せぬエラーが発生しました';
+      setStatus({ type: 'error', message: `エラー: ${errorMessage}` });
     } finally {
       setIsLoading(false);
-      setUrl('');
     }
   };
 
@@ -64,8 +78,14 @@ export default function Home() {
         </form>
 
         {status && (
-          <div className="mt-6 p-4 rounded-md bg-blue-50 text-blue-800 text-sm">
-            {status}
+          <div className={`mt-6 p-4 rounded-md text-sm ${
+            status.type === 'error' 
+              ? 'bg-red-50 text-red-800' 
+              : status.type === 'success' 
+                ? 'bg-green-50 text-green-800' 
+                : 'bg-blue-50 text-blue-800'
+          }`}>
+            {status.message}
           </div>
         )}
       </div>
