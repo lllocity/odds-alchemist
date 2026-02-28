@@ -63,12 +63,13 @@ public class OddsSyncService {
 
         for (OddsData odds : oddsList) {
             List<Object> row = new ArrayList<>();
-            row.add(timestamp);
-            row.add(odds.horseNumber());
-            row.add(odds.horseName());
-            row.add(Objects.toString(odds.winOdds(), ""));
-            row.add(Objects.toString(odds.placeOddsMin(), ""));
-            row.add(Objects.toString(odds.placeOddsMax(), ""));
+            row.add(timestamp);                                       // A列: タイムスタンプ
+            row.add(odds.raceName());                                  // B列: レース名
+            row.add(odds.horseNumber());                               // C列: 馬番
+            row.add(odds.horseName());                                 // D列: 馬名
+            row.add(Objects.toString(odds.winOdds(), ""));            // E列: 単勝オッズ
+            row.add(Objects.toString(odds.placeOddsMin(), ""));       // F列: 複勝オッズ（下限）
+            row.add(Objects.toString(odds.placeOddsMax(), ""));       // G列: 複勝オッズ（上限）
             values.add(row);
         }
         return values;

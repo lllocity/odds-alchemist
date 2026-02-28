@@ -35,7 +35,7 @@ class OddsSyncServiceTest {
 
         when(scrapingService.fetchHtml(url)).thenReturn(dummyHtml);
         when(parser.parse(dummyHtml)).thenReturn(List.of(
-                new OddsData("1", "キタサンブラック", 2.5, 1.2, 1.5)
+                new OddsData("第1回東京1レース", "1", "キタサンブラック", 2.5, 1.2, 1.5)
         ));
 
         service.fetchAndSaveOdds(url, range);
@@ -49,9 +49,10 @@ class OddsSyncServiceTest {
 
         List<List<Object>> savedValues = captor.getValue();
         assertThat(savedValues).hasSize(1);
-        
+
         List<Object> row = savedValues.get(0);
-        assertThat(row.get(1)).isEqualTo("1");
-        assertThat(row.get(2)).isEqualTo("キタサンブラック");
+        assertThat(row.get(1)).isEqualTo("第1回東京1レース"); // B列: レース名
+        assertThat(row.get(2)).isEqualTo("1");               // C列: 馬番
+        assertThat(row.get(3)).isEqualTo("キタサンブラック"); // D列: 馬名
     }
 }
