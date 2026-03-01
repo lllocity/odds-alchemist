@@ -3,3 +3,14 @@ spring:
     name: backend
   profiles:
     include: secret
+
+odds:
+  scraping:
+    # 実行間隔: Cron式（秒 分 時 日 月 曜日）
+    # 例: "0 */5 * * * *" = 5分ごと, "0 0 * * * *" = 1時間ごと
+    cron: "0 */5 * * * *"
+    # 書き込み先スプレッドシートの範囲
+    sheet-range: "シート1!A:G"
+    # 監視対象のスポナビ競馬オッズページURL（複数指定可）
+    target-urls:
+      - "https://sports.yahoo.co.jp/keiba/race/odds/tfw/2606020211"
