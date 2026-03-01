@@ -9,6 +9,7 @@ import org.mockito.ArgumentCaptor;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -17,6 +18,7 @@ class OddsSyncServiceTest {
     private OddsScrapingService scrapingService;
     private RaceOddsParser parser;
     private GoogleSheetsService sheetsService;
+    private OddsAnomalyDetector anomalyDetector;
     private OddsSyncService service;
 
     @BeforeEach
@@ -24,7 +26,9 @@ class OddsSyncServiceTest {
         scrapingService = mock(OddsScrapingService.class);
         parser = mock(RaceOddsParser.class);
         sheetsService = mock(GoogleSheetsService.class);
-        service = new OddsSyncService(scrapingService, parser, sheetsService);
+        anomalyDetector = mock(OddsAnomalyDetector.class);
+        when(anomalyDetector.detect(any())).thenReturn(List.of());
+        service = new OddsSyncService(scrapingService, parser, sheetsService, anomalyDetector);
     }
 
     @Test
@@ -54,5 +58,8 @@ class OddsSyncServiceTest {
         assertThat(row.get(1)).isEqualTo("第1回東京1レース"); // B列: レース名
         assertThat(row.get(2)).isEqualTo("1");               // C列: 馬番
         assertThat(row.get(3)).isEqualTo("キタサンブラック"); // D列: 馬名
+
+        // 異常検知が呼び出されていること
+        verify(anomalyDetector).detect(any());
     }
 }

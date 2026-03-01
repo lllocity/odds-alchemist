@@ -1,5 +1,6 @@
 package com.oddsalchemist.backend.service;
 
+import com.oddsalchemist.backend.dto.AnomalyAlertDto;
 import com.oddsalchemist.backend.dto.OddsData;
 import com.oddsalchemist.backend.parser.RaceOddsParser;
 import org.slf4j.Logger;
@@ -22,11 +23,14 @@ public class OddsSyncService {
     private final OddsScrapingService scrapingService;
     private final RaceOddsParser parser;
     private final GoogleSheetsService sheetsService;
+    private final OddsAnomalyDetector anomalyDetector;
 
-    public OddsSyncService(OddsScrapingService scrapingService, RaceOddsParser parser, GoogleSheetsService sheetsService) {
+    public OddsSyncService(OddsScrapingService scrapingService, RaceOddsParser parser,
+                           GoogleSheetsService sheetsService, OddsAnomalyDetector anomalyDetector) {
         this.scrapingService = scrapingService;
         this.parser = parser;
         this.sheetsService = sheetsService;
+        this.anomalyDetector = anomalyDetector;
     }
 
     /**
@@ -47,10 +51,14 @@ public class OddsSyncService {
             return 0; // 変更点: 0件であることをコントローラーに伝える
         }
 
-        // 3. スプレッドシート用の2次元配列に変換
+        // 3. 異常検知を実行
+        List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsList);
+        logger.info("異常検知完了: アラート件数={}", alerts.size());
+
+        // 4. スプレッドシート用の2次元配列に変換
         List<List<Object>> values = convertToSheetData(oddsList);
 
-        // 4. スプレッドシートへ書き込み
+        // 5. スプレッドシートへ書き込み
         sheetsService.appendData(range, values);
         logger.info("Successfully saved {} rows to spreadsheet.", values.size());
 
