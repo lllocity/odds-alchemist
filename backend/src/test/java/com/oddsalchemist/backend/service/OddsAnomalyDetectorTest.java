@@ -5,6 +5,9 @@ import com.oddsalchemist.backend.dto.OddsData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -262,7 +265,113 @@ class OddsAnomalyDetectorTest {
         assertThat(latest).extracting(AnomalyAlertDto::horseNumber).contains("5");
     }
 
+    // ===== ロジックC: トレンド逸脱検知 =====
+
+    @Test
+    void detect_初回実行でトレンド逸脱アラートが発生しないこと() {
+        // 初回は基準値として登録されるだけ。比較対象がないのでアラートなし
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 10.0, 3.0, 5.0)  // 単勝4位 → 対象外(rank<5)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isEmpty();
+    }
+
+    @Test
+    void detect_中穴帯の馬が基準値から5パーセント以上逸脱した場合にアラートが発生すること() {
+        // 5頭構成: 1〜3位はtop3, 4位(rank4)は対象外, 5位(rank5)が中穴帯
+        // 1回目: 5番馬 単勝20.0 → 支持率=0.05 をbaseline登録
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0));
+
+        // 2回目: 5番馬 単勝10.0 → 支持率=0.1, 逸脱量=0.05 >= 0.05 → アラート
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
+
+        List<AnomalyAlertDto> trendAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("トレンド逸脱")).toList();
+        assertThat(trendAlerts).hasSize(1);
+        assertThat(trendAlerts.get(0).horseNumber()).isEqualTo("5");
+        // 逸脱量 = 1/10 - 1/20 = 0.1 - 0.05 = 0.05
+        assertThat(trendAlerts.get(0).value()).isCloseTo(0.05, org.assertj.core.data.Offset.offset(1e-9));
+    }
+
+    @Test
+    void detect_逸脱量が閾値未満の場合はトレンド逸脱アラートが発生しないこと() {
+        // 1回目: 5番馬 単勝20.0 → baseline
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0));
+
+        // 2回目: 5番馬 単勝18.0 → 逸脱量 = 1/18 - 1/20 ≈ 0.0056 < 0.05 → アラートなし
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 18.0));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isEmpty();
+    }
+
+    @Test
+    void detect_中穴大穴帯以外の馬はトレンド逸脱対象外であること() {
+        // rank4の馬 (odds 4位) は対象外 (rank < TREND_RANK_MIN=5)
+        // 5頭でrank4になる馬をbaselineに設定してから大きく短縮
+        detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("4", "4番人気馬", 8.0, 2.0, 4.0),
+                odds("5", "中穴馬", 20.0, 3.0, 6.0)
+        ));
+
+        // 4番人気馬 (rank4) のオッズが大幅短縮しても対象外
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("4", "4番人気馬", 3.5, 1.5, 2.5),  // 大幅短縮だがrank4 → 対象外
+                odds("5", "中穴馬", 20.0, 3.0, 6.0)
+        ));
+
+        assertThat(alerts.stream()
+                .filter(a -> a.alertType().equals("トレンド逸脱") && a.horseNumber().equals("4")))
+                .isEmpty();
+    }
+
+    @Test
+    void detect_日次リセットにより翌日は基準値が再設定されること() {
+        // 日付1: 基準値を登録
+        Clock day1Clock = Clock.fixed(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(day1Clock);
+
+        // day1: 基準値登録（5番馬: 20.0）
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0));
+        // day1: 逸脱量 = 0.05 → アラート発生
+        List<AnomalyAlertDto> day1Alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
+        assertThat(day1Alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isNotEmpty();
+
+        // 日付2: 日付変更 → 基準値リセット
+        Clock day2Clock = Clock.fixed(Instant.parse("2026-01-02T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(day2Clock);
+
+        // day2: 同じオッズで呼び出し → 基準値が 10.0 に再設定されるのでアラートなし
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
+        List<AnomalyAlertDto> day2Alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
+
+        assertThat(day2Alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isEmpty();
+    }
+
     // ===== ヘルパーメソッド =====
+
+    /**
+     * 5頭のレースデータを生成する。馬番1〜5、単勝オッズは引数順で設定。
+     * テスト用に単勝順位が固定になるよう昇順で渡すこと。
+     */
+    private List<OddsData> buildRace(double w1, double w2, double w3, double w4, double w5) {
+        return List.of(
+                odds("1", "馬1", w1, 1.1, 1.3),
+                odds("2", "馬2", w2, 1.2, 1.5),
+                odds("3", "馬3", w3, 1.4, 2.0),
+                odds("4", "馬4", w4, 2.0, 4.0),
+                odds("5", "馬5", w5, 3.0, 6.0)
+        );
+    }
 
     private OddsData odds(String number, String name, double win, double placeMin, double placeMax) {
         return new OddsData(RACE, number, name, win, placeMin, placeMax);

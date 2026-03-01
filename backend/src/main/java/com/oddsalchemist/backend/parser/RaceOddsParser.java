@@ -9,8 +9,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.time.DateTimeException;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,6 +26,8 @@ public class RaceOddsParser {
     private static final Pattern PLACE_ODDS_PATTERN = Pattern.compile("(\\d+\\.\\d+)\\s*-\\s*(\\d+\\.\\d+)");
     // titleタグからのレース名抽出: "競馬 - {レース名} オッズ - スポーツナビ"
     private static final Pattern RACE_NAME_FROM_TITLE_PATTERN = Pattern.compile("競馬 - (.+?) オッズ");
+    // 発走時刻の抽出: "HH:MM" 形式（例: "15:25"）
+    private static final Pattern TIME_PATTERN = Pattern.compile("(\\d{1,2}):(\\d{2})");
 
     public List<OddsData> parse(String html) {
         List<OddsData> oddsList = new ArrayList<>();
@@ -47,6 +52,83 @@ public class RaceOddsParser {
 
         logger.info("パース完了: レース名='{}' 有効な馬データ {}件", raceName, oddsList.size());
         return oddsList;
+    }
+
+    /**
+     * HTMLからレース発走時刻を抽出します。
+     * 以下の優先順位で試みます:
+     * <ol>
+     *   <li>スポナビのレース情報エリア（dl.hr-predictRaceInfo__raceData 内のdd要素）</li>
+     *   <li>HTMLのtime要素</li>
+     *   <li>ページ全体のテキストからの正規表現フォールバック（"HH:MM" 形式）</li>
+     * </ol>
+     * いずれでも取得できない場合は {@link Optional#empty()} を返します。
+     *
+     * @param html パース対象のHTML文字列
+     * @return 発走時刻（取得できない場合は empty）
+     */
+    public Optional<LocalTime> parseStartTime(String html) {
+        try {
+            Document doc = Jsoup.parse(html);
+
+            // 戦略1: スポナビのレース情報エリア（dl > dd の各テキスト）
+            for (Element dd : doc.select("dl.hr-predictRaceInfo__raceData dd")) {
+                Optional<LocalTime> time = extractTimeFromText(dd.text());
+                if (time.isPresent()) {
+                    logger.debug("発走時刻を取得しました（レース情報エリア）: {}", time.get());
+                    return time;
+                }
+            }
+
+            // 戦略2: HTML標準の <time> 要素
+            for (Element timeEl : doc.select("time")) {
+                Optional<LocalTime> time = extractTimeFromText(timeEl.text());
+                if (time.isPresent()) {
+                    logger.debug("発走時刻を取得しました（time要素）: {}", time.get());
+                    return time;
+                }
+            }
+
+            // 戦略3: スポナビ特有の発走情報リスト（li要素内テキスト）
+            for (Element li : doc.select("li.hr-predictRaceInfo__raceDataList")) {
+                Optional<LocalTime> time = extractTimeFromText(li.text());
+                if (time.isPresent()) {
+                    logger.debug("発走時刻を取得しました（raceDataList）: {}", time.get());
+                    return time;
+                }
+            }
+
+            logger.warn("発走時刻の取得に失敗しました。空で代替します。");
+            return Optional.empty();
+
+        } catch (Exception e) {
+            logger.warn("発走時刻のパース中にエラーが発生しました: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * テキストから "HH:MM" 形式の時刻を抽出します。
+     * 競馬の発走時刻として妥当な範囲（06:00〜20:59）のみを有効とします。
+     */
+    private Optional<LocalTime> extractTimeFromText(String text) {
+        if (text == null || text.isBlank()) {
+            return Optional.empty();
+        }
+        Matcher matcher = TIME_PATTERN.matcher(text);
+        while (matcher.find()) {
+            try {
+                int hour = Integer.parseInt(matcher.group(1));
+                int minute = Integer.parseInt(matcher.group(2));
+                // 競馬の発走時刻として妥当な範囲（06〜20時）のみ有効
+                if (hour >= 6 && hour <= 20) {
+                    return Optional.of(LocalTime.of(hour, minute));
+                }
+            } catch (DateTimeException | NumberFormatException e) {
+                // 不正な時刻はスキップ
+            }
+        }
+        return Optional.empty();
     }
 
     /**

@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -15,23 +17,32 @@ import java.util.stream.Collectors;
 
 /**
  * オッズデータの異常を検知するサービス。
- * 以下の2種類の異常を検知する:
+ * 以下の3種類の異常を検知する:
  * <ul>
- *   <li>ロジックA: 支持率の急増（+2.0%以上）</li>
+ *   <li>ロジックA: 支持率の急増（前回比 +2.0%以上）</li>
  *   <li>ロジックB: 単複オッズの順位乖離（ギャップ3以上）</li>
+ *   <li>ロジックC: 朝イチ基準値からのトレンド逸脱（基準比 +5.0%以上, 中穴・大穴帯）</li>
  * </ul>
  * 上位3番人気（単勝1〜3位）はノイズが大きいため検知対象から除外する。
+ * 初期基準値は日次リセットされ、その日の最初の検知呼び出し時に設定される。
  */
 @Service
 public class OddsAnomalyDetector {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsAnomalyDetector.class);
 
-    /** 支持率急増の閾値（+2.0% = 0.02） */
+    /** 支持率急増の閾値（前回比 +2.0% = 0.02） */
     static final BigDecimal SUPPORT_RATE_THRESHOLD = new BigDecimal("0.02");
+
+    /** 朝イチ基準値からのトレンド逸脱閾値（基準比 +5.0% = 0.05） */
+    static final BigDecimal TREND_DEVIATION_THRESHOLD = new BigDecimal("0.05");
 
     /** 単複順位乖離の閾値 */
     static final int RANK_GAP_THRESHOLD = 3;
+
+    /** トレンド逸脱の対象人気帯（中穴: 5〜8番人気, 大穴: 9〜12番人気） */
+    static final int TREND_RANK_MIN = 5;
+    static final int TREND_RANK_MAX = 12;
 
     /** BigDecimal除算時の小数点以下桁数 */
     private static final int SUPPORT_RATE_SCALE = 10;
@@ -42,8 +53,31 @@ public class OddsAnomalyDetector {
      */
     private final ConcurrentHashMap<String, Double> previousWinOdds = new ConcurrentHashMap<>();
 
+    /**
+     * 朝イチ基準値（その日の初回取得オッズ）を保持するインメモリキャッシュ。
+     * putIfAbsent で初回のみ設定され、日次でリセットされる。
+     * キー: "レース名:馬番"
+     */
+    private final ConcurrentHashMap<String, Double> baselineWinOdds = new ConcurrentHashMap<>();
+
     /** 最新の異常検知アラートリスト（スレッドセーフ） */
     private final List<AnomalyAlertDto> latestAlerts = new CopyOnWriteArrayList<>();
+
+    /** 基準値の最終リセット日（日付変更を検知するために使用） */
+    private volatile LocalDate lastBaselineResetDate = LocalDate.MIN;
+
+    /** 時刻取得に使用するクロック（テストで差し替え可能） */
+    private final Clock clock;
+
+    /** Spring が使用するデフォルトコンストラクタ */
+    public OddsAnomalyDetector() {
+        this(Clock.systemDefaultZone());
+    }
+
+    /** テスト用コンストラクタ（任意のClockを注入可能） */
+    OddsAnomalyDetector(Clock clock) {
+        this.clock = clock;
+    }
 
     /**
      * オッズデータリストを解析し、異常を検知してアラートリストを返します。
@@ -53,6 +87,9 @@ public class OddsAnomalyDetector {
      * @return 検知されたアラートのリスト（変更不可）
      */
     public List<AnomalyAlertDto> detect(List<OddsData> oddsList) {
+        // 日付変更時に初期基準値をリセット
+        resetBaselineIfNewDay();
+
         List<AnomalyAlertDto> alerts = new ArrayList<>();
 
         // 単勝オッズが有効なデータのみを対象とする
@@ -84,6 +121,9 @@ public class OddsAnomalyDetector {
 
             // ロジックB: 単複オッズ順位乖離検知
             detectRankDivergence(validList, top3Keys, winRankMap, alerts);
+
+            // ロジックC: 朝イチ基準値からのトレンド逸脱検知
+            detectTrendDeviation(validList, top3Keys, winRankMap, alerts);
 
             // 前回データを更新（上位3番人気を含む全有効馬）
             validList.forEach(d -> previousWinOdds.put(buildKey(d.raceName(), d.horseNumber()), d.winOdds()));
@@ -183,6 +223,72 @@ public class OddsAnomalyDetector {
                 logger.info("【順位乖離検知】馬番={}, 馬名={}, 単勝順位={}, 複勝順位={}, ギャップ={}",
                         data.horseNumber(), data.horseName(), winRank, placeRank, gap);
             }
+        }
+    }
+
+    /**
+     * ロジックC: 朝イチ基準値からのトレンド逸脱を検知します。
+     * 中穴帯（5〜8番人気）・大穴帯（9〜12番人気）の馬を対象とする。
+     * 計算式: (1 / 現在オッズ) - (1 / 基準オッズ) >= 0.05
+     * 初回呼び出し時に基準値を設定し、以降は比較のみ行う（日次リセットあり）。
+     */
+    private void detectTrendDeviation(
+            List<OddsData> validList,
+            Set<String> top3Keys,
+            Map<String, Integer> winRankMap,
+            List<AnomalyAlertDto> alerts) {
+
+        for (OddsData current : validList) {
+            String key = buildKey(current.raceName(), current.horseNumber());
+            if (top3Keys.contains(key)) {
+                continue; // 上位3番人気は除外
+            }
+
+            // 中穴・大穴帯（5〜12番人気）のみを対象とする
+            Integer winRank = winRankMap.get(key);
+            if (winRank == null || winRank < TREND_RANK_MIN || winRank > TREND_RANK_MAX) {
+                // 対象人気帯外はスキップ（基準値の設定は行う）
+                baselineWinOdds.putIfAbsent(key, current.winOdds());
+                continue;
+            }
+
+            // 初期基準値を設定（初回のみ: putIfAbsent）
+            baselineWinOdds.putIfAbsent(key, current.winOdds());
+            Double baselineOdds = baselineWinOdds.get(key);
+
+            if (baselineOdds == null || baselineOdds <= 0) {
+                continue;
+            }
+
+            BigDecimal currentRate = BigDecimal.ONE.divide(
+                    BigDecimal.valueOf(current.winOdds()), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
+            BigDecimal baselineRate = BigDecimal.ONE.divide(
+                    BigDecimal.valueOf(baselineOdds), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
+            BigDecimal deviation = currentRate.subtract(baselineRate);
+
+            if (deviation.compareTo(TREND_DEVIATION_THRESHOLD) >= 0) {
+                double deviationValue = deviation.doubleValue();
+                alerts.add(new AnomalyAlertDto(
+                        current.horseNumber(),
+                        current.horseName(),
+                        "トレンド逸脱",
+                        deviationValue));
+                logger.info("【トレンド逸脱検知】馬番={}, 馬名={}, 基準オッズ={}, 現在オッズ={}, 逸脱量={}, 単勝順位={}",
+                        current.horseNumber(), current.horseName(), baselineOdds, current.winOdds(), deviation, winRank);
+            }
+        }
+    }
+
+    /**
+     * 日付が変わった場合に初期基準値をリセットします。
+     * 毎日の初回スクレイピングで新たな基準値が設定されます。
+     */
+    private void resetBaselineIfNewDay() {
+        LocalDate today = LocalDate.now(clock);
+        if (!today.equals(lastBaselineResetDate)) {
+            baselineWinOdds.clear();
+            lastBaselineResetDate = today;
+            logger.info("日付変更を検知しました。朝イチ基準値をリセットします: {}", today);
         }
     }
 

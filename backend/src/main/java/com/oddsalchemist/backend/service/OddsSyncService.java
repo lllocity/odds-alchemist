@@ -9,10 +9,13 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class OddsSyncService {
@@ -24,6 +27,9 @@ public class OddsSyncService {
     private final RaceOddsParser parser;
     private final GoogleSheetsService sheetsService;
     private final OddsAnomalyDetector anomalyDetector;
+
+    /** URL別の発走時刻キャッシュ（スクレイピングのたびに更新） */
+    private final ConcurrentHashMap<String, Optional<LocalTime>> cachedStartTimes = new ConcurrentHashMap<>();
 
     public OddsSyncService(OddsScrapingService scrapingService, RaceOddsParser parser,
                            GoogleSheetsService sheetsService, OddsAnomalyDetector anomalyDetector) {
@@ -51,18 +57,36 @@ public class OddsSyncService {
             return 0; // 変更点: 0件であることをコントローラーに伝える
         }
 
-        // 3. 異常検知を実行
+        // 3. 発走時刻をパースしてキャッシュに保存（次回スケジューリングの間隔算出に使用）
+        Optional<LocalTime> startTime = parser.parseStartTime(html);
+        cachedStartTimes.put(targetUrl, startTime);
+        startTime.ifPresentOrElse(
+                t -> logger.info("発走時刻を取得: URL={}, 発走時刻={}", targetUrl, t),
+                () -> logger.warn("発走時刻を取得できませんでした: URL={}", targetUrl));
+
+        // 4. 異常検知を実行
         List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsList);
         logger.info("異常検知完了: アラート件数={}", alerts.size());
 
-        // 4. スプレッドシート用の2次元配列に変換
+        // 5. スプレッドシート用の2次元配列に変換
         List<List<Object>> values = convertToSheetData(oddsList);
 
-        // 5. スプレッドシートへ書き込み
+        // 6. スプレッドシートへ書き込み
         sheetsService.appendData(range, values);
         logger.info("Successfully saved {} rows to spreadsheet.", values.size());
 
         return values.size(); // 変更点: 保存した件数を返す
+    }
+
+    /**
+     * 指定URLの最新発走時刻キャッシュを返します。
+     * スクレイピング前（初回実行前）は {@link Optional#empty()} を返します。
+     *
+     * @param url 対象URL
+     * @return キャッシュされた発走時刻（未取得の場合は empty）
+     */
+    public Optional<LocalTime> getCachedStartTime(String url) {
+        return cachedStartTimes.getOrDefault(url, Optional.empty());
     }
 
     private List<List<Object>> convertToSheetData(List<OddsData> oddsList) {

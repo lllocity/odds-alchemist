@@ -4,7 +4,9 @@ import com.oddsalchemist.backend.dto.OddsData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -157,6 +159,83 @@ class RaceOddsParserTest {
         List<OddsData> result = parser.parse(html);
 
         assertThat(result).isEmpty();
+    }
+
+    // ===== parseStartTime のテスト =====
+
+    @Test
+    void parseStartTime_レース情報エリアのdd要素から発走時刻を取得できること() {
+        String html = """
+                <html><body>
+                  <h2 class="hr-predictRaceInfo__title">中山記念</h2>
+                  <dl class="hr-predictRaceInfo__raceData">
+                    <dt>発走</dt>
+                    <dd>15:25</dd>
+                    <dt>距離</dt>
+                    <dd>芝2000m</dd>
+                  </dl>
+                </body></html>
+                """;
+
+        Optional<LocalTime> result = parser.parseStartTime(html);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(LocalTime.of(15, 25));
+    }
+
+    @Test
+    void parseStartTime_time要素から発走時刻を取得できること() {
+        String html = """
+                <html><body>
+                  <h2 class="hr-predictRaceInfo__title">有馬記念</h2>
+                  <time>15:25</time>
+                </body></html>
+                """;
+
+        Optional<LocalTime> result = parser.parseStartTime(html);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(LocalTime.of(15, 25));
+    }
+
+    @Test
+    void parseStartTime_発走時刻がない場合はemptyを返すこと() {
+        String html = """
+                <html><body>
+                  <h2 class="hr-predictRaceInfo__title">テストレース</h2>
+                  <p>オッズ情報のみ</p>
+                </body></html>
+                """;
+
+        Optional<LocalTime> result = parser.parseStartTime(html);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void parseStartTime_空のHTMLでも例外が発生しないこと() {
+        Optional<LocalTime> result = parser.parseStartTime("");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void parseStartTime_競馬の時間帯外の時刻は無視されること() {
+        // "01:30" は競馬の発走時刻として無効（6時以前）
+        String html = """
+                <html><body>
+                  <dl class="hr-predictRaceInfo__raceData">
+                    <dd>01:30</dd>
+                    <dd>15:00</dd>
+                  </dl>
+                </body></html>
+                """;
+
+        Optional<LocalTime> result = parser.parseStartTime(html);
+
+        // 無効な01:30はスキップされ、有効な15:00が返る
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(LocalTime.of(15, 0));
     }
 
     @Test
