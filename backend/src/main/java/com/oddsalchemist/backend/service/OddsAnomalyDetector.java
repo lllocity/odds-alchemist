@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>ロジックA: 支持率の急増（前回比 +2.0%以上）</li>
  *   <li>ロジックB: 単複オッズの順位乖離（ギャップ3以上）</li>
- *   <li>ロジックC: 朝イチ基準値からのトレンド逸脱（基準比 +5.0%以上, 中穴・大穴帯）</li>
+ *   <li>ロジックC: その日の初回detect()呼び出し時のオッズを基準値としたトレンド逸脱（基準比 +5.0%以上, 中穴・大穴帯）</li>
  * </ul>
  * 上位3番人気（単勝1〜3位）はノイズが大きいため検知対象から除外する。
  * 初期基準値は日次リセットされ、その日の最初の検知呼び出し時に設定される。
@@ -36,7 +36,7 @@ public class OddsAnomalyDetector {
     /** 支持率急増の閾値（前回比 +2.0% = 0.02） */
     static final BigDecimal SUPPORT_RATE_THRESHOLD = new BigDecimal("0.02");
 
-    /** 朝イチ基準値からのトレンド逸脱閾値（基準比 +5.0% = 0.05） */
+    /** その日の初回detect()呼び出し時のオッズからのトレンド逸脱閾値（基準比 +5.0% = 0.05） */
     static final BigDecimal TREND_DEVIATION_THRESHOLD = new BigDecimal("0.05");
 
     /** 単複順位乖離の閾値 */
@@ -60,7 +60,7 @@ public class OddsAnomalyDetector {
     private final ConcurrentHashMap<String, Double> previousWinOdds = new ConcurrentHashMap<>();
 
     /**
-     * 朝イチ基準値（その日の初回取得オッズ）を保持するインメモリキャッシュ。
+     * その日の初回detect()呼び出し時のオッズを保持するインメモリキャッシュ。
      * putIfAbsent で初回のみ設定され、日次でリセットされる。
      * キー: "レース名:馬番"
      */
@@ -128,7 +128,7 @@ public class OddsAnomalyDetector {
             // ロジックB: 単複オッズ順位乖離検知
             detectRankDivergence(validList, top3Keys, winRankMap, alerts);
 
-            // ロジックC: 朝イチ基準値からのトレンド逸脱検知
+            // ロジックC: その日の初回detect()呼び出し時のオッズからのトレンド逸脱検知
             detectTrendDeviation(validList, top3Keys, winRankMap, alerts);
 
             // 前回データを更新（上位3番人気を含む全有効馬）
@@ -237,7 +237,7 @@ public class OddsAnomalyDetector {
     }
 
     /**
-     * ロジックC: 朝イチ基準値からのトレンド逸脱を検知します。
+     * ロジックC: その日の初回detect()呼び出し時のオッズからのトレンド逸脱を検知します。
      * 中穴帯（5〜8番人気）・大穴帯（9〜12番人気）の馬を対象とする。
      * 計算式: (1 / 現在オッズ) - (1 / 基準オッズ) >= 0.05
      * 初回呼び出し時に基準値を設定し、以降は比較のみ行う（日次リセットあり）。
@@ -300,7 +300,7 @@ public class OddsAnomalyDetector {
         if (!today.equals(lastBaselineResetDate)) {
             baselineWinOdds.clear();
             lastBaselineResetDate = today;
-            logger.info("日付変更を検知しました。朝イチ基準値をリセットします: {}", today);
+            logger.info("日付変更を検知しました。初回オッズ基準値をリセットします: {}", today);
         }
     }
 
