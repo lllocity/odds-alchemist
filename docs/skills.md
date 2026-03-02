@@ -11,12 +11,30 @@
 
 ### Google Sheets APIのルール
 - **データマッピング**: `OddsSyncService.java` でスプレッドシートに書き込む際、以下の列順序を厳守すること。
-  - A列: 取得日時 (形式: `yyyy/MM/dd HH:mm:ss`)
-  - B列: 馬番
-  - C列: 馬名
-  - D列: 単勝オッズ
-  - E列: 複勝オッズ（下限）
-  - F列: 複勝オッズ（上限）
+  - **オッズシート**（`sheetRange` で指定）:
+    - A列: 取得日時 (形式: `yyyy/MM/dd HH:mm:ss`)
+    - B列: レース名
+    - C列: 馬番
+    - D列: 馬名
+    - E列: 単勝オッズ
+    - F列: 複勝オッズ（下限）
+    - G列: 複勝オッズ（上限）
+  - **アラートシート** (`Alerts!A:G`):
+    - A列: 検知日時 (ISO-8601形式)
+    - B列: 対象URL
+    - C列: レース名
+    - D列: 馬番
+    - E列: 馬名
+    - F列: 検知タイプ
+    - G列: 該当数値
+- **アラート永続化**: 異常検知後に `saveAlertsToSheet()` で `Alerts!A:G` へ Append する。書き込み失敗は `try-catch` で捕捉してERRORログのみ出力し、スクレイピング処理を止めない。
+
+### 監視対象URLの管理パターン (TargetUrlStore)
+- `TargetUrlStore` はスレッドセーフな `CopyOnWriteArrayList` でURLを保持する `@Service`。
+- 起動時に `ScrapingProperties`（`application.yaml` の `odds.scraping.targetUrls`）から初期値をロードする。
+- `OddsScrapingScheduler` は `properties.targetUrls()` ではなく `targetUrlStore.getUrls()` を参照すること（YAML直参照を廃止済み）。
+- REST API (`OddsTargetsController`) で動的なURL登録・削除が可能: `POST/DELETE /api/odds/targets`。
+- `OddsScrapingScheduler` の `scrapeAllTargets()` は URL ごとに `try-catch` で囲み、1件の失敗が後続URLの処理を止めないようにする。
 
 ### アーキテクチャと品質
 - クラスの責務を単一にし、肥大化を防ぐ（例: 取得処理、パース処理、保存処理は別クラスに分割する）。
@@ -50,5 +68,12 @@
 - `apiBaseUrl` は `process.env.NEXT_PUBLIC_API_BASE_URL` 経由で取得し、`useCallback` の依存配列に含めること。
 
 ### 検知タイプ別スタイリングのパターン
-- `Record<AlertType, StyleObject>` 形式の設定オブジェクトで、検知タイプごとの色を一元管理する。
+- `Record<AlertType, ConfigObject>` 形式の設定オブジェクトで、色・説明・値フォーマッタを一元管理する。
 - 未知の検知タイプには `?? fallback` でデフォルトスタイルを適用し、型エラーを防ぐ。
+- 値の単位は検知タイプによって異なる（支持率急増・トレンド逸脱: `%` 表示、順位乖離: 整数のランク差）ため、`formatValue: (v: number) => string` をConfig内に定義してロジックを分散させない。
+
+### フロントエンドのURL管理パターン
+- `GET /api/odds/targets` で登録済みURL一覧を取得し、初回マウント時に `useEffect` + `fetchTargetUrls` で読み込む。
+- `POST /api/odds/targets` でURL登録（body: `{ url: string }`）、`DELETE /api/odds/targets` でURL削除（body: `{ url: string }`）。
+- 登録・削除の成功時はレスポンスの `data.urls` を `setTargetUrls` にセットして再取得なしで表示を更新する。
+- 通信エラーは `try-catch` + `console.warn` で処理し、UIを壊さない。

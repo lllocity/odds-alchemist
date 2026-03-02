@@ -2,6 +2,7 @@ package com.oddsalchemist.backend.scheduler;
 
 import com.oddsalchemist.backend.config.ScrapingProperties;
 import com.oddsalchemist.backend.service.OddsSyncService;
+import com.oddsalchemist.backend.service.TargetUrlStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
@@ -37,10 +38,13 @@ public class OddsScrapingScheduler implements SchedulingConfigurer {
 
     private final OddsSyncService oddsSyncService;
     private final ScrapingProperties properties;
+    private final TargetUrlStore targetUrlStore;
 
-    public OddsScrapingScheduler(OddsSyncService oddsSyncService, ScrapingProperties properties) {
+    public OddsScrapingScheduler(OddsSyncService oddsSyncService, ScrapingProperties properties,
+                                  TargetUrlStore targetUrlStore) {
         this.oddsSyncService = oddsSyncService;
         this.properties = properties;
+        this.targetUrlStore = targetUrlStore;
     }
 
     /**
@@ -71,10 +75,10 @@ public class OddsScrapingScheduler implements SchedulingConfigurer {
      * 失敗してもシステムを止めず、次のURLの処理を継続します。
      */
     public void scrapeAllTargets() {
-        int urlCount = properties.targetUrls().size();
+        int urlCount = targetUrlStore.getUrls().size();
         logger.info("定期スクレイピング開始: 対象URL数={}", urlCount);
 
-        for (String url : properties.targetUrls()) {
+        for (String url : targetUrlStore.getUrls()) {
             try {
                 int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
                 logger.info("スクレイピング完了: URL={}, 保存件数={}", url, saved);
@@ -94,7 +98,7 @@ public class OddsScrapingScheduler implements SchedulingConfigurer {
      * @return 次回実行までの待機時間
      */
     Duration calculateDelay(LocalTime now) {
-        return properties.targetUrls().stream()
+        return targetUrlStore.getUrls().stream()
                 .map(url -> calculateDelayForUrl(url, now))
                 .min(Duration::compareTo)
                 .orElse(DELAY_30MIN);

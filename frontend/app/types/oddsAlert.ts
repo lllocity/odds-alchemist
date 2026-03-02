@@ -8,6 +8,8 @@
 export type AlertType = '支持率急増' | '順位乖離' | 'トレンド逸脱';
 
 export interface AnomalyAlert {
+  /** レース名 */
+  raceName: string;
   /** 馬番 */
   horseNumber: string;
   /** 馬名 */

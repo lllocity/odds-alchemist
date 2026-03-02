@@ -68,6 +68,9 @@ public class OddsSyncService {
         List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsList);
         logger.info("異常検知完了: アラート件数={}", alerts.size());
 
+        // 4.1. 検知されたアラートをスプレッドシートの "Alerts" シートへ永続化
+        saveAlertsToSheet(targetUrl, alerts);
+
         // 5. スプレッドシート用の2次元配列に変換
         List<List<Object>> values = convertToSheetData(oddsList);
 
@@ -87,6 +90,39 @@ public class OddsSyncService {
      */
     public Optional<LocalTime> getCachedStartTime(String url) {
         return cachedStartTimes.getOrDefault(url, Optional.empty());
+    }
+
+    /**
+     * 検知されたアラートを "Alerts" シートへ追記します。
+     * アラートがない場合は何もしません。
+     * 書き込み失敗時はシステムを止めず、ERRORログを出力します。
+     *
+     * 列順: A=検知日時, B=対象URL, C=レース名, D=馬番, E=馬名, F=検知タイプ, G=該当数値
+     */
+    private void saveAlertsToSheet(String targetUrl, List<AnomalyAlertDto> alerts) {
+        if (alerts.isEmpty()) {
+            return;
+        }
+
+        List<List<Object>> rows = new ArrayList<>();
+        for (AnomalyAlertDto alert : alerts) {
+            rows.add(List.of(
+                    alert.detectedAt(),   // A列: 検知日時
+                    targetUrl,            // B列: 対象URL
+                    alert.raceName(),     // C列: レース名
+                    alert.horseNumber(),  // D列: 馬番
+                    alert.horseName(),    // E列: 馬名
+                    alert.alertType(),    // F列: 検知タイプ
+                    alert.value()         // G列: 該当数値
+            ));
+        }
+
+        try {
+            sheetsService.appendData("Alerts!A:G", rows);
+            logger.info("アラートをSheetsに保存しました: {}件, URL={}", rows.size(), targetUrl);
+        } catch (IOException e) {
+            logger.error("アラートのSheets書き込みに失敗しました: URL={}", targetUrl, e);
+        }
     }
 
     private List<List<Object>> convertToSheetData(List<OddsData> oddsList) {

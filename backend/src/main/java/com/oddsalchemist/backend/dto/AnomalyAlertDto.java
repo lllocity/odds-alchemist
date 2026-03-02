@@ -4,6 +4,7 @@ package com.oddsalchemist.backend.dto;
  * 異常検知アラートの情報を保持するRecordクラス。
  * フロントエンドへの通知や内部管理に使用する。
  *
+ * @param raceName    レース名（例: "第91回 日本ダービー"）
  * @param horseNumber 馬番
  * @param horseName   馬名
  * @param alertType   検知タイプ（"支持率急増"、"順位乖離"、"トレンド逸脱"）
@@ -11,6 +12,7 @@ package com.oddsalchemist.backend.dto;
  * @param detectedAt  検知時刻（ISO-8601形式の文字列: "yyyy-MM-dd'T'HH:mm:ss"）
  */
 public record AnomalyAlertDto(
+        String raceName,
         String horseNumber,
         String horseName,
         String alertType,

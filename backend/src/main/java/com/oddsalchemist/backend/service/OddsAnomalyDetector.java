@@ -173,6 +173,7 @@ public class OddsAnomalyDetector {
             if (increase.compareTo(SUPPORT_RATE_THRESHOLD) >= 0) {
                 double increaseValue = increase.doubleValue();
                 alerts.add(new AnomalyAlertDto(
+                        current.raceName(),
                         current.horseNumber(),
                         current.horseName(),
                         "支持率急増",
@@ -223,6 +224,7 @@ public class OddsAnomalyDetector {
             int gap = winRank - placeRank;
             if (gap >= RANK_GAP_THRESHOLD) {
                 alerts.add(new AnomalyAlertDto(
+                        data.raceName(),
                         data.horseNumber(),
                         data.horseName(),
                         "順位乖離",
@@ -277,6 +279,7 @@ public class OddsAnomalyDetector {
             if (deviation.compareTo(TREND_DEVIATION_THRESHOLD) >= 0) {
                 double deviationValue = deviation.doubleValue();
                 alerts.add(new AnomalyAlertDto(
+                        current.raceName(),
                         current.horseNumber(),
                         current.horseName(),
                         "トレンド逸脱",

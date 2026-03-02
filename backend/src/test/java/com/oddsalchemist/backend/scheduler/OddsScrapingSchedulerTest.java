@@ -2,6 +2,7 @@ package com.oddsalchemist.backend.scheduler;
 
 import com.oddsalchemist.backend.config.ScrapingProperties;
 import com.oddsalchemist.backend.service.OddsSyncService;
+import com.oddsalchemist.backend.service.TargetUrlStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,22 +18,23 @@ import static org.mockito.Mockito.*;
 class OddsScrapingSchedulerTest {
 
     private OddsSyncService oddsSyncService;
-    private OddsScrapingScheduler scheduler;
+    private TargetUrlStore targetUrlStore;
+    private ScrapingProperties props;
 
     @BeforeEach
     void setUp() {
         oddsSyncService = mock(OddsSyncService.class);
+        targetUrlStore = mock(TargetUrlStore.class);
+        props = new ScrapingProperties("シート1!A:G");
     }
 
     // ===== scrapeAllTargets のテスト =====
 
     @Test
     void scrapeAllTargets_複数URLを順番に処理すること() throws Exception {
-        ScrapingProperties props = new ScrapingProperties(
-                "シート1!A:G",
-                List.of("https://example.com/race/1", "https://example.com/race/2")
-        );
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        when(targetUrlStore.getUrls()).thenReturn(
+                List.of("https://example.com/race/1", "https://example.com/race/2"));
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/1", "シート1!A:G")).thenReturn(10);
         when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/2", "シート1!A:G")).thenReturn(8);
@@ -45,11 +47,9 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void scrapeAllTargets_1件が失敗しても残りのURLを継続処理すること() throws Exception {
-        ScrapingProperties props = new ScrapingProperties(
-                "シート1!A:G",
-                List.of("https://example.com/race/fail", "https://example.com/race/ok")
-        );
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        when(targetUrlStore.getUrls()).thenReturn(
+                List.of("https://example.com/race/fail", "https://example.com/race/ok"));
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/fail", "シート1!A:G"))
                 .thenThrow(new IOException("接続タイムアウト"));
@@ -65,11 +65,8 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void scrapeAllTargets_URLが0件の場合も正常に完了すること() {
-        ScrapingProperties props = new ScrapingProperties(
-                "シート1!A:G",
-                List.of()
-        );
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        when(targetUrlStore.getUrls()).thenReturn(List.of());
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         scheduler.scrapeAllTargets();
 
@@ -80,8 +77,7 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void calculateDelayForUrl_発走時刻がキャッシュされていない場合は30分を返すこと() {
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of("https://example.com/race/1"));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1")).thenReturn(Optional.empty());
 
@@ -92,8 +88,7 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void calculateDelayForUrl_12時前は発走時刻によらず30分を返すこと() {
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of("https://example.com/race/1"));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         // 発走15:00, 現在11:00（正午前）→ 30分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
@@ -106,8 +101,7 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void calculateDelayForUrl_発走60分超前かつ12時以降は15分を返すこと() {
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of("https://example.com/race/1"));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         // 発走15:00, 現在13:00（残り120分）→ 15分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
@@ -120,8 +114,7 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void calculateDelayForUrl_発走60分前は5分を返すこと() {
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of("https://example.com/race/1"));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         // 発走15:00, 現在14:00（残り60分）→ 5分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
@@ -134,8 +127,7 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void calculateDelayForUrl_発走10分前は1分を返すこと() {
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of("https://example.com/race/1"));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         // 発走15:00, 現在14:55（残り5分）→ 1分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
@@ -148,8 +140,7 @@ class OddsScrapingSchedulerTest {
 
     @Test
     void calculateDelayForUrl_発走後は30分を返すこと() {
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of("https://example.com/race/1"));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         // 発走15:00, 現在15:10（発走10分後）→ 30分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
@@ -164,8 +155,8 @@ class OddsScrapingSchedulerTest {
     void calculateDelay_複数URLのうち最短の遅延が選択されること() {
         String url1 = "https://example.com/race/1";
         String url2 = "https://example.com/race/2";
-        ScrapingProperties props = new ScrapingProperties("シート1!A:G", List.of(url1, url2));
-        scheduler = new OddsScrapingScheduler(oddsSyncService, props);
+        when(targetUrlStore.getUrls()).thenReturn(List.of(url1, url2));
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
         // URL1: 発走15:00, 現在14:55 → 残り5分 → 1分間隔
         // URL2: 発走17:00, 現在14:55 → 残り125分 → 15分間隔

@@ -21,6 +21,12 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
   - 開発起動: `npm run dev`
   - ビルド: `npm run build`
 
+## システムアーキテクチャ概要
+- **即時取得**: フロントエンドから `POST /api/odds/fetch` でワンショットのスクレイピング・検知を実行。
+- **スケジュール監視**: `OddsScrapingScheduler` がインメモリの `TargetUrlStore` に登録されたURLを定期的にループ処理。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。
+- **異常検知**: `OddsAnomalyDetector` がロジックA（支持率急増）・B（順位乖離）・C（トレンド逸脱）を実行。インメモリでアラートを保持し、`GET /api/odds/alerts` でフロントエンドに提供。
+- **永続化**: オッズデータは `sheetRange` シートへ、アラートデータは `Alerts!A:G` シートへそれぞれ Append のみ。
+
 ## 実装時の参照ドキュメント
 実装作業を行う際は、**必ず `docs/skills.md` を参照すること**。
 スクレイピング・Google Sheets・CORS・TypeScript型定義・ポーリングなど、このプロジェクト固有のパターンと注意事項がバックエンド／フロントエンドに分けて記載されている。
