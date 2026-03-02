@@ -8,7 +8,7 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 
 ## 技術スタックとコマンド
 ### バックエンド (`/backend`)
-- **環境**: Java 17+, Spring Boot 3.x
+- **環境**: Java 21, Spring Boot 4.0.x
 - **主要ライブラリ**: Jsoup (HTMLパース), Google API Client (Sheets連携)
 - **ビルド・実行**:
   - 開発起動: `./gradlew bootRun`
@@ -20,3 +20,7 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 - **ビルド・実行**:
   - 開発起動: `npm run dev`
   - ビルド: `npm run build`
+
+## 実装時の参照ドキュメント
+実装作業を行う際は、**必ず `docs/skills.md` を参照すること**。
+スクレイピング・Google Sheets・CORS・TypeScript型定義・ポーリングなど、このプロジェクト固有のパターンと注意事項がバックエンド／フロントエンドに分けて記載されている。

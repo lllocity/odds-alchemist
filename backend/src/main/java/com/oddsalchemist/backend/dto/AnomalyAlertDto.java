@@ -6,12 +6,14 @@ package com.oddsalchemist.backend.dto;
  *
  * @param horseNumber 馬番
  * @param horseName   馬名
- * @param alertType   検知タイプ（"支持率急増" または "順位乖離"）
- * @param value       該当数値（支持率急増の場合は増加量、順位乖離の場合はギャップ値）
+ * @param alertType   検知タイプ（"支持率急増"、"順位乖離"、"トレンド逸脱"）
+ * @param value       該当数値（支持率急増の場合は増加量、順位乖離の場合はギャップ値、トレンド逸脱の場合は逸脱量）
+ * @param detectedAt  検知時刻（ISO-8601形式の文字列: "yyyy-MM-dd'T'HH:mm:ss"）
  */
 public record AnomalyAlertDto(
         String horseNumber,
         String horseName,
         String alertType,
-        double value
+        double value,
+        String detectedAt
 ) {}

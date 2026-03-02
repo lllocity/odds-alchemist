@@ -3,7 +3,6 @@ spring:
     name: backend
   profiles:
     include: secret
-
 odds:
   scraping:
     # 書き込み先スプレッドシートの範囲
