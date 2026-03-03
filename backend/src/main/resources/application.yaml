@@ -7,4 +7,4 @@ odds:
   scraping:
     # 書き込み先スプレッドシートの範囲
     # 実行間隔はレース発走時刻から動的に算出（30分/15分/5分/1分）
-    sheet-range: "シート1!A:G"
+    sheet-range: "OddsData!A:G"

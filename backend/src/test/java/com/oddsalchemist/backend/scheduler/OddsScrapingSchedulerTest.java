@@ -25,7 +25,7 @@ class OddsScrapingSchedulerTest {
     void setUp() {
         oddsSyncService = mock(OddsSyncService.class);
         targetUrlStore = mock(TargetUrlStore.class);
-        props = new ScrapingProperties("シート1!A:G");
+        props = new ScrapingProperties("OddsData!A:G");
     }
 
     // ===== scrapeAllTargets のテスト =====
@@ -36,13 +36,13 @@ class OddsScrapingSchedulerTest {
                 List.of("https://example.com/race/1", "https://example.com/race/2"));
         OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
-        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/1", "シート1!A:G")).thenReturn(10);
-        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/2", "シート1!A:G")).thenReturn(8);
+        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/1", "OddsData!A:G")).thenReturn(10);
+        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/2", "OddsData!A:G")).thenReturn(8);
 
         scheduler.scrapeAllTargets();
 
-        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/1", "シート1!A:G");
-        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/2", "シート1!A:G");
+        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/1", "OddsData!A:G");
+        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/2", "OddsData!A:G");
     }
 
     @Test
@@ -51,16 +51,16 @@ class OddsScrapingSchedulerTest {
                 List.of("https://example.com/race/fail", "https://example.com/race/ok"));
         OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
-        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/fail", "シート1!A:G"))
+        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/fail", "OddsData!A:G"))
                 .thenThrow(new IOException("接続タイムアウト"));
-        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/ok", "シート1!A:G"))
+        when(oddsSyncService.fetchAndSaveOdds("https://example.com/race/ok", "OddsData!A:G"))
                 .thenReturn(5);
 
         // 例外がスローされないこと（システムを止めない）
         scheduler.scrapeAllTargets();
 
-        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/fail", "シート1!A:G");
-        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/ok", "シート1!A:G");
+        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/fail", "OddsData!A:G");
+        verify(oddsSyncService).fetchAndSaveOdds("https://example.com/race/ok", "OddsData!A:G");
     }
 
     @Test

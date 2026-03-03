@@ -36,7 +36,7 @@ class OddsSyncServiceTest {
     @Test
     void fetchAndSaveOdds_正常に連携処理が実行されること() throws Exception {
         String url = "https://example.com/race";
-        String range = "シート1!A:F";
+        String range = "OddsData!A:G";
         String dummyHtml = "<html>dummy</html>";
 
         when(scrapingService.fetchHtml(url)).thenReturn(dummyHtml);
@@ -68,7 +68,7 @@ class OddsSyncServiceTest {
     @Test
     void fetchAndSaveOdds_パース済みの発走時刻がキャッシュされること() throws Exception {
         String url = "https://example.com/race";
-        String range = "シート1!A:F";
+        String range = "OddsData!A:G";
         String dummyHtml = "<html>dummy</html>";
         LocalTime startTime = LocalTime.of(15, 25);
 
