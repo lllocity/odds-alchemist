@@ -30,10 +30,9 @@
 - **アラート永続化**: 異常検知後に `saveAlertsToSheet()` で `Alerts!A:G` へ Append する。書き込み失敗は `try-catch` で捕捉してERRORログのみ出力し、スクレイピング処理を止めない。
 
 ### 監視対象URLの管理パターン (TargetUrlStore)
-- `TargetUrlStore` はスレッドセーフな `CopyOnWriteArrayList` でURLを保持する `@Service`。
-- 起動時に `ScrapingProperties`（`application.yaml` の `odds.scraping.targetUrls`）から初期値をロードする。
-- `OddsScrapingScheduler` は `properties.targetUrls()` ではなく `targetUrlStore.getUrls()` を参照すること（YAML直参照を廃止済み）。
-- REST API (`OddsTargetsController`) で動的なURL登録・削除が可能: `POST/DELETE /api/odds/targets`。
+- `TargetUrlStore` はスレッドセーフな `CopyOnWriteArrayList` でURLを保持する `@Service`。起動時は空。
+- REST API (`OddsTargetsController`) で動的なURL登録・削除のみ行う: `POST/DELETE /api/odds/targets`。
+- `OddsScrapingScheduler` は `targetUrlStore.getUrls()` を参照すること。
 - `OddsScrapingScheduler` の `scrapeAllTargets()` は URL ごとに `try-catch` で囲み、1件の失敗が後続URLの処理を止めないようにする。
 
 ### アーキテクチャと品質

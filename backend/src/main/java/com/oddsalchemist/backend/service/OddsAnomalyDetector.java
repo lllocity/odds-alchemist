@@ -164,20 +164,15 @@ public class OddsAnomalyDetector {
                 continue; // 前回データなし（初回実行）はスキップ
             }
 
-            BigDecimal currentRate = BigDecimal.ONE.divide(
-                    BigDecimal.valueOf(current.winOdds()), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
-            BigDecimal prevRate = BigDecimal.ONE.divide(
-                    BigDecimal.valueOf(prevOdds), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
-            BigDecimal increase = currentRate.subtract(prevRate);
+            BigDecimal increase = toSupportRate(current.winOdds()).subtract(toSupportRate(prevOdds));
 
             if (increase.compareTo(SUPPORT_RATE_THRESHOLD) >= 0) {
-                double increaseValue = increase.doubleValue();
                 alerts.add(new AnomalyAlertDto(
                         current.raceName(),
                         current.horseNumber(),
                         current.horseName(),
                         "支持率急増",
-                        increaseValue,
+                        increase.doubleValue(),
                         LocalDateTime.now(clock).format(DETECTED_AT_FORMATTER)));
                 logger.info("【支持率急増検知】馬番={}, 馬名={}, 支持率増加={}, 前回オッズ={}, 現在オッズ={}",
                         current.horseNumber(), current.horseName(), increase, prevOdds, current.winOdds());
@@ -241,6 +236,7 @@ public class OddsAnomalyDetector {
      * 中穴帯（5〜8番人気）・大穴帯（9〜12番人気）の馬を対象とする。
      * 計算式: (1 / 現在オッズ) - (1 / 基準オッズ) >= 0.05
      * 初回呼び出し時に基準値を設定し、以降は比較のみ行う（日次リセットあり）。
+     * 基準値は人気帯変動に備えて対象外の馬にも設定する。
      */
     private void detectTrendDeviation(
             List<OddsData> validList,
@@ -254,36 +250,29 @@ public class OddsAnomalyDetector {
                 continue; // 上位3番人気は除外
             }
 
-            // 中穴・大穴帯（5〜12番人気）のみを対象とする
+            // 基準値を全馬に設定（初回のみ: 人気帯変動に備えて範囲外でも記録）
+            baselineWinOdds.putIfAbsent(key, current.winOdds());
+
+            // 中穴・大穴帯（5〜12番人気）のみアラート判定
             Integer winRank = winRankMap.get(key);
             if (winRank == null || winRank < TREND_RANK_MIN || winRank > TREND_RANK_MAX) {
-                // 対象人気帯外はスキップ（基準値の設定は行う）
-                baselineWinOdds.putIfAbsent(key, current.winOdds());
                 continue;
             }
 
-            // 初期基準値を設定（初回のみ: putIfAbsent）
-            baselineWinOdds.putIfAbsent(key, current.winOdds());
             Double baselineOdds = baselineWinOdds.get(key);
-
             if (baselineOdds == null || baselineOdds <= 0) {
                 continue;
             }
 
-            BigDecimal currentRate = BigDecimal.ONE.divide(
-                    BigDecimal.valueOf(current.winOdds()), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
-            BigDecimal baselineRate = BigDecimal.ONE.divide(
-                    BigDecimal.valueOf(baselineOdds), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
-            BigDecimal deviation = currentRate.subtract(baselineRate);
+            BigDecimal deviation = toSupportRate(current.winOdds()).subtract(toSupportRate(baselineOdds));
 
             if (deviation.compareTo(TREND_DEVIATION_THRESHOLD) >= 0) {
-                double deviationValue = deviation.doubleValue();
                 alerts.add(new AnomalyAlertDto(
                         current.raceName(),
                         current.horseNumber(),
                         current.horseName(),
                         "トレンド逸脱",
-                        deviationValue,
+                        deviation.doubleValue(),
                         LocalDateTime.now(clock).format(DETECTED_AT_FORMATTER)));
                 logger.info("【トレンド逸脱検知】馬番={}, 馬名={}, 基準オッズ={}, 現在オッズ={}, 逸脱量={}, 単勝順位={}",
                         current.horseNumber(), current.horseName(), baselineOdds, current.winOdds(), deviation, winRank);
@@ -311,6 +300,11 @@ public class OddsAnomalyDetector {
      */
     public List<AnomalyAlertDto> getLatestAlerts() {
         return Collections.unmodifiableList(new ArrayList<>(latestAlerts));
+    }
+
+    /** オッズを支持率（1 / オッズ）に変換します。BigDecimalで精度を保証します。 */
+    private BigDecimal toSupportRate(double odds) {
+        return BigDecimal.ONE.divide(BigDecimal.valueOf(odds), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
     }
 
     /** 馬を一意に識別するキーを生成します。 */

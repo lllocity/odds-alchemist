@@ -68,37 +68,24 @@ public class RaceOddsParser {
      * @return 発走時刻（取得できない場合は empty）
      */
     public Optional<LocalTime> parseStartTime(String html) {
+        // セレクターを優先順位順に試みる
+        String[] selectors = {
+            "dl.hr-predictRaceInfo__raceData dd",
+            "time",
+            "li.hr-predictRaceInfo__raceDataList"
+        };
         try {
             Document doc = Jsoup.parse(html);
-
-            // 戦略1: スポナビのレース情報エリア（dl > dd の各テキスト）
-            for (Element dd : doc.select("dl.hr-predictRaceInfo__raceData dd")) {
-                Optional<LocalTime> time = extractTimeFromText(dd.text());
-                if (time.isPresent()) {
-                    logger.debug("発走時刻を取得しました（レース情報エリア）: {}", time.get());
-                    return time;
+            for (String selector : selectors) {
+                for (Element el : doc.select(selector)) {
+                    Optional<LocalTime> time = extractTimeFromText(el.text());
+                    if (time.isPresent()) {
+                        logger.debug("発走時刻を取得しました ({}): {}", selector, time.get());
+                        return time;
+                    }
                 }
             }
-
-            // 戦略2: HTML標準の <time> 要素
-            for (Element timeEl : doc.select("time")) {
-                Optional<LocalTime> time = extractTimeFromText(timeEl.text());
-                if (time.isPresent()) {
-                    logger.debug("発走時刻を取得しました（time要素）: {}", time.get());
-                    return time;
-                }
-            }
-
-            // 戦略3: スポナビ特有の発走情報リスト（li要素内テキスト）
-            for (Element li : doc.select("li.hr-predictRaceInfo__raceDataList")) {
-                Optional<LocalTime> time = extractTimeFromText(li.text());
-                if (time.isPresent()) {
-                    logger.debug("発走時刻を取得しました（raceDataList）: {}", time.get());
-                    return time;
-                }
-            }
-
-            logger.warn("発走時刻の取得に失敗しました。空で代替します。");
+            logger.info("発走時刻を取得できませんでした。空で代替します。");
             return Optional.empty();
 
         } catch (Exception e) {
@@ -155,7 +142,7 @@ public class RaceOddsParser {
             }
         }
 
-        logger.warn("レース名の取得に失敗しました。空文字で代替します。");
+        logger.info("レース名を取得できませんでした。空文字で代替します。");
         return "";
     }
 

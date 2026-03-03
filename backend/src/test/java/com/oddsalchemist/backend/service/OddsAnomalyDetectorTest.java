@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -335,10 +336,90 @@ class OddsAnomalyDetectorTest {
     }
 
     @Test
-    void detect_日次リセットにより翌日は基準値が再設定されること() {
-        // 日付1: 基準値を登録
-        Clock day1Clock = Clock.fixed(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
-        detector = new OddsAnomalyDetector(day1Clock);
+    void detect_大穴帯の馬が基準値から5パーセント以上逸脱した場合にアラートが発生すること() {
+        // 9頭構成: 1〜3位はtop3, 9位(rank9)が大穴帯
+        // 1回目: 9番馬 単勝50.0 → 支持率=0.02 をbaseline登録
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 2.0, 1.2, 1.5),
+                odds("3", "馬3", 3.0, 1.4, 2.0),
+                odds("4", "馬4", 5.0, 2.0, 3.5),
+                odds("5", "馬5", 8.0, 2.5, 4.0),
+                odds("6", "馬6", 12.0, 3.0, 5.0),
+                odds("7", "馬7", 15.0, 3.5, 6.0),
+                odds("8", "馬8", 18.0, 4.0, 7.0),
+                odds("9", "大穴馬", 50.0, 5.0, 8.0) // rank9（大穴帯）
+        ));
+
+        // 2回目: 50.0 → 10.0 → 逸脱量 = 1/10 - 1/50 = 0.08 >= 0.05 → アラート
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 2.0, 1.2, 1.5),
+                odds("3", "馬3", 3.0, 1.4, 2.0),
+                odds("4", "馬4", 5.0, 2.0, 3.5),
+                odds("5", "馬5", 8.0, 2.5, 4.0),
+                odds("6", "馬6", 12.0, 3.0, 5.0),
+                odds("7", "馬7", 15.0, 3.5, 6.0),
+                odds("8", "馬8", 18.0, 4.0, 7.0),
+                odds("9", "大穴馬", 10.0, 4.0, 7.0)
+        ));
+
+        List<AnomalyAlertDto> trendAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("トレンド逸脱") && a.horseNumber().equals("9"))
+                .toList();
+        assertThat(trendAlerts).hasSize(1);
+        // 逸脱量 = 1/10 - 1/50 = 0.1 - 0.02 = 0.08
+        assertThat(trendAlerts.get(0).value()).isCloseTo(0.08, org.assertj.core.data.Offset.offset(1e-9));
+    }
+
+    @Test
+    void detect_TREND_RANK_MAX超の馬はトレンド逸脱対象外であること() {
+        // 13頭構成: 13番馬はrank13（TREND_RANK_MAX=12を超える）
+        // 1回目: 13番馬の基準値を100.0で登録
+        detector.detect(List.of(
+                odds("1", "馬1",  1.5, 1.1, 1.3),
+                odds("2", "馬2",  2.0, 1.2, 1.5),
+                odds("3", "馬3",  3.0, 1.4, 2.0),
+                odds("4", "馬4",  5.0, 2.0, 3.5),
+                odds("5", "馬5",  8.0, 2.5, 4.0),
+                odds("6", "馬6", 12.0, 3.0, 5.0),
+                odds("7", "馬7", 15.0, 3.5, 6.0),
+                odds("8", "馬8", 18.0, 4.0, 7.0),
+                odds("9", "馬9", 25.0, 5.0, 8.0),
+                odds("10", "馬10", 30.0, 5.5, 9.0),
+                odds("11", "馬11", 40.0, 6.0, 10.0),
+                odds("12", "馬12", 50.0, 7.0, 12.0),
+                odds("13", "超大穴馬", 100.0, 8.0, 15.0) // rank13 → 対象外
+        ));
+
+        // 2回目: 全馬を短縮し13番馬をrank13のまま維持（10.0 > 他全馬）
+        // 逸脱量 = 1/10 - 1/100 = 0.09 >= 0.05 → 範囲内なら発火するが rank13 → 除外
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1",  1.0, 1.0, 1.2),
+                odds("2", "馬2",  1.5, 1.1, 1.3),
+                odds("3", "馬3",  2.0, 1.2, 1.5),
+                odds("4", "馬4",  2.5, 1.4, 2.0),
+                odds("5", "馬5",  3.0, 1.6, 2.5),
+                odds("6", "馬6",  4.0, 1.8, 3.0),
+                odds("7", "馬7",  5.0, 2.0, 3.5),
+                odds("8", "馬8",  6.0, 2.5, 4.0),
+                odds("9", "馬9",  7.0, 3.0, 5.0),
+                odds("10", "馬10", 8.0, 3.5, 6.0),
+                odds("11", "馬11", 8.5, 4.0, 7.0),
+                odds("12", "馬12", 9.0, 4.5, 8.0),
+                odds("13", "超大穴馬", 10.0, 5.0, 9.0) // 最大オッズ → rank13のまま
+        ));
+
+        assertThat(alerts.stream()
+                .filter(a -> a.alertType().equals("トレンド逸脱") && a.horseNumber().equals("13")))
+                .isEmpty();
+    }
+
+    @Test
+    void detect_同一インスタンスで日付が変わると基準値がリセットされること() {
+        // 可変クロックを使って同一インスタンスでの日付変更をテスト
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
 
         // day1: 基準値登録（5番馬: 20.0）
         detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0));
@@ -346,15 +427,35 @@ class OddsAnomalyDetectorTest {
         List<AnomalyAlertDto> day1Alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
         assertThat(day1Alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isNotEmpty();
 
-        // 日付2: 日付変更 → 基準値リセット
-        Clock day2Clock = Clock.fixed(Instant.parse("2026-01-02T09:00:00Z"), ZoneOffset.UTC);
-        detector = new OddsAnomalyDetector(day2Clock);
+        // 同一インスタンスのまま翌日に変更 → resetBaselineIfNewDay() が基準値をクリア
+        clock.setInstant(Instant.parse("2026-01-02T09:00:00Z"));
 
-        // day2: 同じオッズで呼び出し → 基準値が 10.0 に再設定されるのでアラートなし
+        // day2: 同じオッズ(10.0)で初回呼び出し → 基準値が 10.0 に再設定される
         detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
+        // day2: 変化なし → アラートなし
         List<AnomalyAlertDto> day2Alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
-
         assertThat(day2Alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isEmpty();
+    }
+
+    // ===== ヘルパークラス =====
+
+    /** テスト用の可変クロック。同一インスタンスで時刻を変更してテストできる。 */
+    static class MutableClock extends Clock {
+        private Instant instant;
+        private final ZoneId zone;
+
+        MutableClock(Instant instant, ZoneId zone) {
+            this.instant = instant;
+            this.zone = zone;
+        }
+
+        void setInstant(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override public ZoneId getZone() { return zone; }
+        @Override public Clock withZone(ZoneId zone) { return new MutableClock(instant, zone); }
+        @Override public Instant instant() { return instant; }
     }
 
     // ===== ヘルパーメソッド =====
