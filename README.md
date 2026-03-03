@@ -1,0 +1,100 @@
+# Odds Alchemist
+
+JRA（日本中央競馬会）のオッズ情報を定期的に取得・分析し、投資妙味のある異常オッズをリアルタイムで検知・通知するシステム。
+
+> **免責事項**: 本システムは個人的な学習・研究目的で開発したものです。不特定多数での利用は想定していません。対象サービスの利用規約を遵守し、自己責任でご利用ください。
+
+## 機能概要
+
+- **オッズ取得**: Yahoo!スポナビ競馬の公開オッズページから情報を収集
+- **異常検知**: 以下の3種類の異常を自動検知
+  - **支持率急増**: 前回比 +2.0%以上の急激な人気集中
+  - **順位乖離**: 単勝と複勝の人気順位が3つ以上ずれている馬
+  - **トレンド逸脱**: その日の初回取得時から支持率が +5.0%以上変化した中穴・大穴馬（5〜12番人気）
+- **永続化**: 取得データとアラートを Google Sheets に記録
+- **スケジュール監視**: 発走時刻に応じてポーリング間隔を自動調整（30分 / 15分 / 5分 / 1分）
+
+## 技術スタック
+
+| レイヤー | 技術 |
+|---|---|
+| バックエンド | Java 21, Spring Boot 4.0.x |
+| フロントエンド | Next.js 14+ (App Router), TypeScript, Tailwind CSS |
+| HTML解析 | Jsoup |
+| 永続化 | Google Sheets API |
+
+## セットアップ
+
+### 前提条件
+
+- Java 21
+- Node.js 18+
+- Google Cloud プロジェクト（Sheets API 有効化済み）
+- サービスアカウントの認証情報（JSON キーファイル）
+
+### バックエンド
+
+1. `backend/src/main/resources/` に `application-secret.yaml` を作成し、認証情報を設定する:
+
+```yaml
+google:
+  sheets:
+    spreadsheet-id: "YOUR_SPREADSHEET_ID"
+    credentials-path: "/path/to/credentials.json"
+```
+
+2. 起動:
+
+```bash
+cd backend
+./gradlew bootRun
+```
+
+### フロントエンド
+
+1. 依存関係のインストールと起動:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+ブラウザで `http://localhost:3000` にアクセス。
+
+## 使い方
+
+1. フロントエンドの「監視URL登録」フォームに Yahoo!スポナビ競馬のオッズページURLを入力して登録する
+   - 例: `https://sports.yahoo.co.jp/keiba/race/odds/tfw/2606020211`
+2. スケジューラーが自動的に定期取得・異常検知を開始する
+3. 検知されたアラートはトップページのアラート一覧にリアルタイム表示される
+4. 「即時取得」フォームから任意のURLを指定してワンショット取得も可能
+
+## Google Sheets の構成
+
+| シート名 | 用途 | 列 |
+|---|---|---|
+| `OddsData` | 取得したオッズデータ | A:取得日時 / B:レース名 / C:馬番 / D:馬名 / E:単勝 / F:複勝下限 / G:複勝上限 |
+| `Alerts` | 検知アラート | A:検知日時 / B:URL / C:レース名 / D:馬番 / E:馬名 / F:検知タイプ / G:数値 |
+
+## API エンドポイント
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| `POST` | `/api/odds/fetch` | 指定URLのオッズを即時取得・検知 |
+| `GET` | `/api/odds/alerts` | 最新のアラート一覧を取得 |
+| `GET` | `/api/odds/targets` | 登録済み監視URL一覧を取得 |
+| `POST` | `/api/odds/targets` | 監視URLを追加 |
+| `DELETE` | `/api/odds/targets` | 監視URLを削除 |
+
+## 開発
+
+```bash
+# バックエンドテスト
+cd backend
+./gradlew test
+
+# フロントエンドビルド確認
+cd frontend
+npm run build
+```
