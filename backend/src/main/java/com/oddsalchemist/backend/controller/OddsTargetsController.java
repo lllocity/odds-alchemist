@@ -1,5 +1,7 @@
 package com.oddsalchemist.backend.controller;
 
+import com.oddsalchemist.backend.config.ScrapingProperties;
+import com.oddsalchemist.backend.service.OddsSyncService;
 import com.oddsalchemist.backend.service.TargetUrlStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,10 +10,12 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 監視対象URLの動的登録・削除を提供するコントローラー。
  * フロントエンドからURLを登録することで、スケジューラーの対象に即時反映される。
+ * URLの新規登録時は、次回定期実行を待たずに即時でオッズ取得を非同期実行する。
  */
 @RestController
 @RequestMapping("/api/odds")
@@ -20,9 +24,14 @@ public class OddsTargetsController {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsTargetsController.class);
     private final TargetUrlStore targetUrlStore;
+    private final OddsSyncService oddsSyncService;
+    private final ScrapingProperties properties;
 
-    public OddsTargetsController(TargetUrlStore targetUrlStore) {
+    public OddsTargetsController(TargetUrlStore targetUrlStore, OddsSyncService oddsSyncService,
+                                  ScrapingProperties properties) {
         this.targetUrlStore = targetUrlStore;
+        this.oddsSyncService = oddsSyncService;
+        this.properties = properties;
     }
 
     /**
@@ -53,6 +62,17 @@ public class OddsTargetsController {
         if (!added) {
             return ResponseEntity.badRequest().body(Map.of("message", "URLはすでに登録済みです: " + url));
         }
+
+        // 登録直後に初回スクレイピングを非同期で実行（次回定期実行を待たずに即時取得）
+        CompletableFuture.runAsync(() -> {
+            try {
+                int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
+                logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
+            } catch (Exception e) {
+                logger.warn("初回スクレイピング失敗: URL={}", url, e);
+            }
+        });
+
         return ResponseEntity.ok(Map.of("message", "URLを登録しました", "urls", targetUrlStore.getUrls()));
     }
 

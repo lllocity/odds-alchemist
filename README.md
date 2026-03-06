@@ -66,7 +66,8 @@ npm run dev
 
 1. フロントエンドの「監視URL登録」フォームに Yahoo!スポナビ競馬のオッズページURLを入力して登録する
    - 例: `https://sports.yahoo.co.jp/keiba/race/odds/tfw/2606020211`
-2. スケジューラーが自動的に定期取得・異常検知を開始する
+   - 登録と同時に初回オッズ取得・異常検知が即時（非同期）で実行される
+2. 以降はスケジューラーが自動的に定期取得・異常検知を継続する（発走時刻に応じて間隔を自動調整）
 3. 検知されたアラートはトップページのアラート一覧にリアルタイム表示される
 4. 「即時取得」フォームから任意のURLを指定してワンショット取得も可能
 
@@ -84,7 +85,7 @@ npm run dev
 | `POST` | `/api/odds/fetch` | 指定URLのオッズを即時取得・検知 |
 | `GET` | `/api/odds/alerts` | 最新のアラート一覧を取得 |
 | `GET` | `/api/odds/targets` | 登録済み監視URL一覧を取得 |
-| `POST` | `/api/odds/targets` | 監視URLを追加 |
+| `POST` | `/api/odds/targets` | 監視URLを追加（登録直後に即時fetch実行） |
 | `DELETE` | `/api/odds/targets` | 監視URLを削除 |
 
 ## 開発
