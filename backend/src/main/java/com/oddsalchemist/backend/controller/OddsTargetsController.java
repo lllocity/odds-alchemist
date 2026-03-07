@@ -1,6 +1,7 @@
 package com.oddsalchemist.backend.controller;
 
 import com.oddsalchemist.backend.config.ScrapingProperties;
+import com.oddsalchemist.backend.scheduler.OddsScrapingScheduler;
 import com.oddsalchemist.backend.service.OddsSyncService;
 import com.oddsalchemist.backend.service.TargetUrlStore;
 import org.slf4j.Logger;
@@ -8,6 +9,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -23,15 +28,19 @@ import java.util.concurrent.CompletableFuture;
 public class OddsTargetsController {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsTargetsController.class);
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+
     private final TargetUrlStore targetUrlStore;
     private final OddsSyncService oddsSyncService;
     private final ScrapingProperties properties;
+    private final OddsScrapingScheduler scheduler;
 
     public OddsTargetsController(TargetUrlStore targetUrlStore, OddsSyncService oddsSyncService,
-                                  ScrapingProperties properties) {
+                                  ScrapingProperties properties, OddsScrapingScheduler scheduler) {
         this.targetUrlStore = targetUrlStore;
         this.oddsSyncService = oddsSyncService;
         this.properties = properties;
+        this.scheduler = scheduler;
     }
 
     /**
@@ -67,7 +76,11 @@ public class OddsTargetsController {
         CompletableFuture.runAsync(() -> {
             try {
                 int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
-                logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
+                Instant next = scheduler.getNextScheduledTime();
+                String nextTime = next != null
+                        ? LocalDateTime.ofInstant(next, ZoneId.systemDefault()).format(TIME_FORMATTER)
+                        : "未定";
+                logger.info("初回スクレイピング完了: URL={}, 保存件数={}, 次回定期実行予定: {}", url, saved, nextTime);
             } catch (Exception e) {
                 logger.warn("初回スクレイピング失敗: URL={}", url, e);
             }

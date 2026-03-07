@@ -43,6 +43,7 @@ public class OddsScrapingScheduler {
     private final ScrapingProperties properties;
     private final TargetUrlStore targetUrlStore;
     private final ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
+    private volatile Instant nextScheduledTime;
 
     public OddsScrapingScheduler(OddsSyncService oddsSyncService, ScrapingProperties properties,
                                   TargetUrlStore targetUrlStore) {
@@ -83,10 +84,17 @@ public class OddsScrapingScheduler {
         Duration delay = properties.debugIntervalMinutes() > 0
                 ? Duration.ofMinutes(properties.debugIntervalMinutes())
                 : calculateDelay(LocalTime.now());
-        Instant nextRun = Instant.now().plus(delay);
-        String nextRunTime = LocalDateTime.ofInstant(nextRun, ZoneId.systemDefault()).format(TIME_FORMATTER);
+        nextScheduledTime = Instant.now().plus(delay);
+        String nextRunTime = LocalDateTime.ofInstant(nextScheduledTime, ZoneId.systemDefault()).format(TIME_FORMATTER);
         logger.info("次回スクレイピングを{}後にスケジュール（予定時刻: {}）", delay, nextRunTime);
-        taskScheduler.schedule(this::runAndReschedule, nextRun);
+        taskScheduler.schedule(this::runAndReschedule, nextScheduledTime);
+    }
+
+    /**
+     * 次回スケジュール実行の予定時刻を返します。
+     */
+    public Instant getNextScheduledTime() {
+        return nextScheduledTime;
     }
 
     /**
