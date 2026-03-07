@@ -8,5 +8,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "odds.scraping")
 public record ScrapingProperties(
-        String sheetRange
+        String sheetRange,
+        /**
+         * デバッグ用固定間隔（分）。0 の場合は発走時刻ベースの動的間隔を使用。
+         */
+        int debugIntervalMinutes
 ) {}

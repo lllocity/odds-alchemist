@@ -25,7 +25,7 @@ class OddsScrapingSchedulerTest {
     void setUp() {
         oddsSyncService = mock(OddsSyncService.class);
         targetUrlStore = mock(TargetUrlStore.class);
-        props = new ScrapingProperties("OddsData!A:G");
+        props = new ScrapingProperties("OddsData!A:G", 0);
     }
 
     // ===== scrapeAllTargets のテスト =====

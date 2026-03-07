@@ -72,9 +72,12 @@ public class OddsScrapingScheduler {
     /**
      * 次回実行をスケジュールします。
      * scrapeAllTargets 完了後に呼び出され、動的な間隔で自己連鎖します。
+     * debugIntervalMinutes が 0 より大きい場合はその値で固定します。
      */
     private void scheduleNext() {
-        Duration delay = calculateDelay(LocalTime.now());
+        Duration delay = properties.debugIntervalMinutes() > 0
+                ? Duration.ofMinutes(properties.debugIntervalMinutes())
+                : calculateDelay(LocalTime.now());
         logger.info("次回スクレイピングを{}後にスケジュール", delay);
         taskScheduler.schedule(this::runAndReschedule, Instant.now().plus(delay));
     }
