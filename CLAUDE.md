@@ -29,6 +29,12 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 - **永続化**: オッズデータ（A〜H列 8列構成）は `sheetRange` シートへ、アラートデータは `Alerts!A:G` シートへそれぞれ Append のみ。
 - **レース識別**: 同名レースが同日に複数存在しうるため、`OddsData.url` フィールドおよびキャッシュキーはURLで一意識別する。
 
+## 監視ダッシュボード（Spring Boot Admin）
+- **URL**: `http://localhost:8080/admin`（Spring Boot Admin UI）
+- ログストリーム・ヘルス・メモリ・スレッド等をブラウザで確認可能
+- `backend/logs/app.log` にログファイル出力（Admin UI 上でリアルタイム閲覧可能）
+- `spring.boot.admin.client.url` には `http://localhost:8080/admin`（context-path 含む）を設定すること
+
 ## 実装時の参照ドキュメント
 実装作業を行う際は、**必ず `docs/skills.md` を参照すること**。
 スクレイピング・Google Sheets・CORS・TypeScript型定義・ポーリングなど、このプロジェクト固有のパターンと注意事項がバックエンド／フロントエンドに分けて記載されている。

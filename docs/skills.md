@@ -11,14 +11,15 @@
 
 ### Google Sheets APIのルール
 - **データマッピング**: `OddsSyncService.java` でスプレッドシートに書き込む際、以下の列順序を厳守すること。
-  - **オッズシート**（`sheetRange` で指定）:
+  - **オッズシート**（`sheetRange` で指定、範囲: `OddsData!A:H`）:
     - A列: 取得日時 (形式: `yyyy/MM/dd HH:mm:ss`)
-    - B列: レース名
-    - C列: 馬番
-    - D列: 馬名
-    - E列: 単勝オッズ
-    - F列: 複勝オッズ（下限）
-    - G列: 複勝オッズ（上限）
+    - B列: 対象URL（レース一意識別のためURLを使用）
+    - C列: レース名
+    - D列: 馬番
+    - E列: 馬名
+    - F列: 単勝オッズ
+    - G列: 複勝オッズ（下限）
+    - H列: 複勝オッズ（上限）
   - **アラートシート** (`Alerts!A:G`):
     - A列: 検知日時 (ISO-8601形式)
     - B列: 対象URL
@@ -28,12 +29,15 @@
     - F列: 検知タイプ
     - G列: 該当数値
 - **アラート永続化**: 異常検知後に `saveAlertsToSheet()` で `Alerts!A:G` へ Append する。書き込み失敗は `try-catch` で捕捉してERRORログのみ出力し、スクレイピング処理を止めない。
+- **レース一意識別**: 同名レースが同日に複数存在しうるため、`OddsData.url` フィールドとキャッシュキー（`"URL:馬番"`）はURLで一意識別する。パーサーは `url=null` で返し、`OddsSyncService` が `targetUrl` を付与する。
 
-### 監視対象URLの管理パターン (TargetUrlStore)
+### 監視対象URLの管理パターン (TargetUrlStore / OddsScrapingScheduler)
 - `TargetUrlStore` はスレッドセーフな `CopyOnWriteArrayList` でURLを保持する `@Service`。起動時は空。
 - REST API (`OddsTargetsController`) で動的なURL登録・削除のみ行う: `POST/DELETE /api/odds/targets`。
-- `OddsScrapingScheduler` は `targetUrlStore.getUrls()` を参照すること。
-- `OddsScrapingScheduler` の `scrapeAllTargets()` は URL ごとに `try-catch` で囲み、1件の失敗が後続URLの処理を止めないようにする。
+- URL登録時: 即時fetchを `CompletableFuture.runAsync()` で非同期実行 → 完了後 `scheduler.scheduleUrl(url)` でスケジュール開始。
+- URL削除時: `scheduler.cancelUrl(url)` でスケジュール即時停止 + `oddsSyncService.clearCachedStartTime(url)` でキャッシュクリア。
+- `OddsScrapingScheduler` は URLごとに独立した `ScheduledFuture<?>` を `ConcurrentHashMap<String, ScheduledFuture<?>> taskMap` で管理し、自己再スケジュール方式で動作する。
+- スクレイピング間隔は `OddsSyncService.getCachedStartTime(url)` の発走時刻から動的算出（30分/15分/5分/1分）。
 
 ### アーキテクチャと品質
 - クラスの責務を単一にし、肥大化を防ぐ（例: 取得処理、パース処理、保存処理は別クラスに分割する）。
@@ -42,6 +46,16 @@
 ### CORS設定パターン
 - 各 `@RestController` に `@CrossOrigin(origins = "http://localhost:3000")` を付与するシンプルなパターンを採用している。
 - 複数のコントローラーが同じ `/api/odds` パスを共有してもSpringは正常に処理できる（HTTPメソッドとパスの組み合わせが一意であればよい）。
+
+### Spring Boot Admin の設定パターン
+- `de.codecentric:spring-boot-admin-starter-server:4.0.0` と `spring-boot-admin-starter-client:4.0.0` を使用。
+- メインクラスに `@EnableAdminServer` を付与する。
+- `spring.boot.admin.context-path=/admin` で Admin UI のパスを `/admin` に設定（`/api/**` との競合を回避）。
+- `spring.boot.admin.client.url` には context-path を含む完全なURLを指定すること: `http://localhost:8080/admin`。
+- `management.endpoints.web.exposure.include=*` で Actuator エンドポイントを全公開する。
+- `logging.file.name=logs/app.log` でログをファイル出力すると Admin UI 上でログストリームが確認できる。
+- Spring Boot Admin 4.0.0 は Spring Security を含まないため、追加の Security 設定は不要。
+- Admin UI アクセス: `http://localhost:8080/admin`
 
 ### Spring Boot バージョン注意事項
 - 本プロジェクトは **Spring Boot 4.0.x** を使用している（Jackson 3 / `tools.jackson.*` 名前空間）。

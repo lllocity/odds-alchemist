@@ -3,6 +3,26 @@ spring:
     name: backend
   profiles:
     include: secret
+  boot:
+    admin:
+      # Admin UIのパス（既存の /api/** と競合しないよう /admin に設定）
+      context-path: /admin
+      client:
+        # 自身を監視対象として自己登録（context-path を含むURLを指定）
+        url: http://localhost:8080/admin
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Spring Boot AdminがActuatorから情報収集できるよう全エンドポイントを公開
+        include: "*"
+
+logging:
+  file:
+    # Spring Boot AdminでログストリームをUI上で確認できるようファイル出力を設定
+    name: logs/app.log
+
 odds:
   scraping:
     # 書き込み先スプレッドシートの範囲
