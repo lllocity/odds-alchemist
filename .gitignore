@@ -1,0 +1,65 @@
+### macOS ###
+.DS_Store
+
+### VS Code ###
+.vscode/
+*.code-workspace
+
+### ========== Backend ========== ###
+
+### 認証情報・シークレット ###
+application-secret.yaml
+
+### GCP Service Account Key ###
+backend/*.json
+
+### Gradle ###
+backend/.gradle/
+backend/build/
+!backend/gradle/wrapper/gradle-wrapper.jar
+!backend/**/src/main/**/build/
+!backend/**/src/test/**/build/
+
+### ログ ###
+backend/logs/
+
+### ========== Frontend ========== ###
+
+### 依存関係 ###
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+
+### テスト ###
+frontend/coverage/
+
+### Next.js ###
+frontend/.next/
+frontend/out/
+
+### ビルド ###
+frontend/build/
+
+### 証明書 ###
+*.pem
+
+### デバッグログ ###
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+### 環境変数 ###
+frontend/.env*
+
+### Vercel ###
+frontend/.vercel
+
+### TypeScript ###
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
