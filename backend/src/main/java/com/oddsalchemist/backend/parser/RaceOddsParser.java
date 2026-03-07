@@ -58,9 +58,10 @@ public class RaceOddsParser {
      * HTMLからレース発走時刻を抽出します。
      * 以下の優先順位で試みます:
      * <ol>
+     *   <li>「発走」テキストを含む div.hr-predictRaceInfo__text（例: "15:30発走"）</li>
      *   <li>スポナビのレース情報エリア（dl.hr-predictRaceInfo__raceData 内のdd要素）</li>
      *   <li>HTMLのtime要素</li>
-     *   <li>ページ全体のテキストからの正規表現フォールバック（"HH:MM" 形式）</li>
+     *   <li>li.hr-predictRaceInfo__raceDataList</li>
      * </ol>
      * いずれでも取得できない場合は {@link Optional#empty()} を返します。
      *
@@ -68,14 +69,26 @@ public class RaceOddsParser {
      * @return 発走時刻（取得できない場合は empty）
      */
     public Optional<LocalTime> parseStartTime(String html) {
-        // セレクターを優先順位順に試みる
-        String[] selectors = {
-            "dl.hr-predictRaceInfo__raceData dd",
-            "time",
-            "li.hr-predictRaceInfo__raceDataList"
-        };
         try {
             Document doc = Jsoup.parse(html);
+
+            // 最優先: "発走" を含む div.hr-predictRaceInfo__text（例: "15:30発走"）
+            for (Element el : doc.select("div.hr-predictRaceInfo__text")) {
+                if (el.text().contains("発走")) {
+                    Optional<LocalTime> time = extractTimeFromText(el.text());
+                    if (time.isPresent()) {
+                        logger.debug("発走時刻を取得しました (div.hr-predictRaceInfo__text): {}", time.get());
+                        return time;
+                    }
+                }
+            }
+
+            // フォールバック
+            String[] selectors = {
+                "dl.hr-predictRaceInfo__raceData dd",
+                "time",
+                "li.hr-predictRaceInfo__raceDataList"
+            };
             for (String selector : selectors) {
                 for (Element el : doc.select(selector)) {
                     Optional<LocalTime> time = extractTimeFromText(el.text());
@@ -85,6 +98,7 @@ public class RaceOddsParser {
                     }
                 }
             }
+
             logger.info("発走時刻を取得できませんでした。空で代替します。");
             return Optional.empty();
 

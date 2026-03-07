@@ -164,6 +164,39 @@ class RaceOddsParserTest {
     // ===== parseStartTime のテスト =====
 
     @Test
+    void parseStartTime_hr_predictRaceInfo__textの発走テキストから時刻を取得できること() {
+        String html = """
+                <html><body>
+                  <h2 class="hr-predictRaceInfo__title">阪神大賞典</h2>
+                  <div class="hr-predictRaceInfo__text">15:30発走</div>
+                </body></html>
+                """;
+
+        Optional<LocalTime> result = parser.parseStartTime(html);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(LocalTime.of(15, 30));
+    }
+
+    @Test
+    void parseStartTime_発走テキストがない同クラスのdivは無視されること() {
+        // "発走" を含まない div は無視され、フォールバックの dd から取得
+        String html = """
+                <html><body>
+                  <div class="hr-predictRaceInfo__text">芝2000m</div>
+                  <dl class="hr-predictRaceInfo__raceData">
+                    <dd>15:25</dd>
+                  </dl>
+                </body></html>
+                """;
+
+        Optional<LocalTime> result = parser.parseStartTime(html);
+
+        assertThat(result).isPresent();
+        assertThat(result.get()).isEqualTo(LocalTime.of(15, 25));
+    }
+
+    @Test
     void parseStartTime_レース情報エリアのdd要素から発走時刻を取得できること() {
         String html = """
                 <html><body>
