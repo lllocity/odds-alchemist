@@ -16,6 +16,7 @@ backend/**/*.json
 ### Gradle ###
 backend/.gradle/
 backend/build/
+backend/bin/
 !backend/gradle/wrapper/gradle-wrapper.jar
 !backend/**/src/main/**/build/
 !backend/**/src/test/**/build/
