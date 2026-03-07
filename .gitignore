@@ -11,7 +11,7 @@
 application-secret.yaml
 
 ### GCP Service Account Key ###
-backend/*.json
+backend/**/*.json
 
 ### Gradle ###
 backend/.gradle/
