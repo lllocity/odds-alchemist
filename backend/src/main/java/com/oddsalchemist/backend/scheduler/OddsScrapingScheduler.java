@@ -12,7 +12,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
@@ -74,12 +77,16 @@ public class OddsScrapingScheduler {
      * scrapeAllTargets 完了後に呼び出され、動的な間隔で自己連鎖します。
      * debugIntervalMinutes が 0 より大きい場合はその値で固定します。
      */
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+
     private void scheduleNext() {
         Duration delay = properties.debugIntervalMinutes() > 0
                 ? Duration.ofMinutes(properties.debugIntervalMinutes())
                 : calculateDelay(LocalTime.now());
-        logger.info("次回スクレイピングを{}後にスケジュール", delay);
-        taskScheduler.schedule(this::runAndReschedule, Instant.now().plus(delay));
+        Instant nextRun = Instant.now().plus(delay);
+        String nextRunTime = LocalDateTime.ofInstant(nextRun, ZoneId.systemDefault()).format(TIME_FORMATTER);
+        logger.info("次回スクレイピングを{}後にスケジュール（予定時刻: {}）", delay, nextRunTime);
+        taskScheduler.schedule(this::runAndReschedule, nextRun);
     }
 
     /**
