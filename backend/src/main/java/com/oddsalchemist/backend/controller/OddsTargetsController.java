@@ -76,11 +76,13 @@ public class OddsTargetsController {
         CompletableFuture.runAsync(() -> {
             try {
                 int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
-                Instant next = scheduler.getNextScheduledTime();
-                String nextTime = next != null
-                        ? LocalDateTime.ofInstant(next, ZoneId.systemDefault()).format(TIME_FORMATTER)
+                logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
+                scheduler.reschedule();
+                Instant rescheduled = scheduler.getNextScheduledTime();
+                String rescheduledTime = rescheduled != null
+                        ? LocalDateTime.ofInstant(rescheduled, ZoneId.systemDefault()).format(TIME_FORMATTER)
                         : "未定";
-                logger.info("初回スクレイピング完了: URL={}, 保存件数={}, 次回定期実行予定: {}", url, saved, nextTime);
+                logger.info("再スケジュール完了: 次回定期実行予定: {}", rescheduledTime);
             } catch (Exception e) {
                 logger.warn("初回スクレイピング失敗: URL={}", url, e);
             }

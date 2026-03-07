@@ -18,6 +18,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.concurrent.ScheduledFuture;
 
 /**
  * 定期的にオッズ情報を取得してスプレッドシートに保存するスケジューラー。
@@ -44,6 +45,7 @@ public class OddsScrapingScheduler {
     private final TargetUrlStore targetUrlStore;
     private final ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
     private volatile Instant nextScheduledTime;
+    private volatile ScheduledFuture<?> currentTask;
 
     public OddsScrapingScheduler(OddsSyncService oddsSyncService, ScrapingProperties properties,
                                   TargetUrlStore targetUrlStore) {
@@ -87,7 +89,19 @@ public class OddsScrapingScheduler {
         nextScheduledTime = Instant.now().plus(delay);
         String nextRunTime = LocalDateTime.ofInstant(nextScheduledTime, ZoneId.systemDefault()).format(TIME_FORMATTER);
         logger.info("次回スクレイピングを{}後にスケジュール（予定時刻: {}）", delay, nextRunTime);
-        taskScheduler.schedule(this::runAndReschedule, nextScheduledTime);
+        currentTask = taskScheduler.schedule(this::runAndReschedule, nextScheduledTime);
+    }
+
+    /**
+     * 既存のスケジュールをキャンセルし、現在の発走時刻キャッシュを元に再スケジュールします。
+     * URL登録後の即時fetch完了時に呼び出すことで、動的間隔を即時反映させます。
+     */
+    public synchronized void reschedule() {
+        if (currentTask != null && !currentTask.isDone()) {
+            currentTask.cancel(false);
+            logger.info("既存のスケジュールをキャンセルし、再スケジュールします");
+        }
+        scheduleNext();
     }
 
     /**
