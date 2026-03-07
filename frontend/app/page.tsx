@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import AlertList from '@/app/components/AlertList';
 import { AnomalyAlert } from '@/app/types/oddsAlert';
 
-/** アラートをポーリングする間隔（ミリ秒） */
-const POLLING_INTERVAL_MS = 30_000;
+/** アラートをポーリングする間隔（ミリ秒）: スクレイピング最短間隔1分に対し10秒で追従 */
+const POLLING_INTERVAL_MS = 10_000;
 
 export default function Home() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
