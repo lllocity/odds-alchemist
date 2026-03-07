@@ -23,9 +23,11 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 
 ## システムアーキテクチャ概要
 - **即時取得**: フロントエンドから `POST /api/odds/fetch` でワンショットのスクレイピング・検知を実行。
-- **スケジュール監視**: `OddsScrapingScheduler` がインメモリの `TargetUrlStore` に登録されたURLを定期的にループ処理。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。
-- **異常検知**: `OddsAnomalyDetector` がロジックA（支持率急増）・B（順位乖離）・C（トレンド逸脱）を実行。インメモリでアラートを保持し、`GET /api/odds/alerts` でフロントエンドに提供。
-- **永続化**: オッズデータは `sheetRange` シートへ、アラートデータは `Alerts!A:G` シートへそれぞれ Append のみ。
+- **スケジュール監視**: `OddsScrapingScheduler` が `TargetUrlStore` に登録されたURLごとに独立した `ScheduledFuture` を持ち、自己再スケジュール方式で定期実行する。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。URL削除時は `cancelUrl()` でスケジュールも即時停止する。
+- **動的間隔**: 各URLの発走時刻キャッシュを `OddsSyncService.getCachedStartTime()` で参照し、残り時間に応じて 30分/15分/5分/1分 の4段階で間隔を切り替える。
+- **異常検知**: `OddsAnomalyDetector` がロジックA（支持率急増）・B（順位乖離）・C（トレンド逸脱）を実行。バックエンド起動後の全アラートを累積保持し、`GET /api/odds/alerts` でフロントエンドに提供。
+- **永続化**: オッズデータ（A〜H列 8列構成）は `sheetRange` シートへ、アラートデータは `Alerts!A:G` シートへそれぞれ Append のみ。
+- **レース識別**: 同名レースが同日に複数存在しうるため、`OddsData.url` フィールドおよびキャッシュキーはURLで一意識別する。
 
 ## 実装時の参照ドキュメント
 実装作業を行う際は、**必ず `docs/skills.md` を参照すること**。

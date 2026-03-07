@@ -1,5 +1,6 @@
 package com.oddsalchemist.backend.service;
 
+import com.oddsalchemist.backend.dto.AnomalyAlertDto;
 import com.oddsalchemist.backend.dto.OddsData;
 import com.oddsalchemist.backend.parser.RaceOddsParser;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,7 +70,7 @@ class OddsSyncServiceTest {
     @Test
     void fetchAndSaveOdds_パース済みの発走時刻がキャッシュされること() throws Exception {
         String url = "https://example.com/race";
-        String range = "OddsData!A:G";
+        String range = "OddsData!A:H";
         String dummyHtml = "<html>dummy</html>";
         LocalTime startTime = LocalTime.of(15, 25);
 
@@ -92,5 +93,54 @@ class OddsSyncServiceTest {
         Optional<LocalTime> result = service.getCachedStartTime("https://example.com/race/unknown");
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void fetchAndSaveOdds_アラート検知時にAlertsシートへ書き込まれること() throws Exception {
+        String url = "https://example.com/race";
+        String range = "OddsData!A:H";
+        String dummyHtml = "<html>dummy</html>";
+
+        AnomalyAlertDto alert = new AnomalyAlertDto(
+                "第1回東京1レース", "5", "テスト馬", "支持率急増", 0.05, "2026-03-07T10:00:00");
+
+        when(scrapingService.fetchHtml(url)).thenReturn(dummyHtml);
+        when(parser.parse(dummyHtml)).thenReturn(List.of(
+                new OddsData("第1回東京1レース", "5", "テスト馬", 10.0, 2.0, 4.0, null)
+        ));
+        when(anomalyDetector.detect(any())).thenReturn(List.of(alert));
+
+        service.fetchAndSaveOdds(url, range);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<List<Object>>> alertCaptor = ArgumentCaptor.forClass(List.class);
+        verify(sheetsService).appendData(eq("Alerts!A:G"), alertCaptor.capture());
+
+        List<List<Object>> alertRows = alertCaptor.getValue();
+        assertThat(alertRows).hasSize(1);
+        List<Object> alertRow = alertRows.get(0);
+        assertThat(alertRow.get(1)).isEqualTo(url);               // B列: URL
+        assertThat(alertRow.get(2)).isEqualTo("第1回東京1レース"); // C列: レース名
+        assertThat(alertRow.get(3)).isEqualTo("5");               // D列: 馬番
+        assertThat(alertRow.get(5)).isEqualTo("支持率急増");       // F列: 検知タイプ
+    }
+
+    @Test
+    void clearCachedStartTime_削除後にemptyを返すこと() throws Exception {
+        String url = "https://example.com/race";
+        String dummyHtml = "<html>dummy</html>";
+        LocalTime startTime = LocalTime.of(15, 25);
+
+        when(scrapingService.fetchHtml(url)).thenReturn(dummyHtml);
+        when(parser.parse(dummyHtml)).thenReturn(List.of(
+                new OddsData("第1回東京1レース", "1", "テスト馬", 2.5, 1.2, 1.5, null)
+        ));
+        when(parser.parseStartTime(dummyHtml)).thenReturn(Optional.of(startTime));
+
+        service.fetchAndSaveOdds(url, "OddsData!A:H");
+        assertThat(service.getCachedStartTime(url)).isPresent();
+
+        service.clearCachedStartTime(url);
+        assertThat(service.getCachedStartTime(url)).isEmpty();
     }
 }

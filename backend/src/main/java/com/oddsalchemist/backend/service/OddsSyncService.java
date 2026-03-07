@@ -45,7 +45,7 @@ public class OddsSyncService {
      * @return スプレッドシートに書き込んだデータ件数
      */
     public int fetchAndSaveOdds(String targetUrl, String range) throws IOException {
-        logger.info("Start fetching odds from URL: {}", targetUrl);
+        logger.info("オッズ取得開始: URL={}", targetUrl);
 
         // 1. HTMLの取得
         String html = scrapingService.fetchHtml(targetUrl);
@@ -54,8 +54,8 @@ public class OddsSyncService {
         List<OddsData> oddsList = parser.parse(html);
 
         if (oddsList.isEmpty()) {
-            logger.warn("No odds data found. URL: {}", targetUrl);
-            return 0; // 変更点: 0件であることをコントローラーに伝える
+            logger.warn("オッズデータが取得できませんでした: URL={}", targetUrl);
+            return 0;
         }
 
         // 2.1. パース結果にURLを付与（レースの一意識別にURLを使用）
@@ -97,6 +97,16 @@ public class OddsSyncService {
      */
     public Optional<LocalTime> getCachedStartTime(String url) {
         return cachedStartTimes.getOrDefault(url, Optional.empty());
+    }
+
+    /**
+     * 指定URLの発走時刻キャッシュを削除します。
+     * URL監視対象から削除する際に呼び出します。
+     *
+     * @param url 削除対象URL
+     */
+    public void clearCachedStartTime(String url) {
+        cachedStartTimes.remove(url);
     }
 
     /**

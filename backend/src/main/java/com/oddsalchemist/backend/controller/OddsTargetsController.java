@@ -100,6 +100,7 @@ public class OddsTargetsController {
             return ResponseEntity.badRequest().body(Map.of("message", "URLが見つかりません: " + url));
         }
         scheduler.cancelUrl(url);
+        oddsSyncService.clearCachedStartTime(url);
         return ResponseEntity.ok(Map.of("message", "URLを削除しました", "urls", targetUrlStore.getUrls()));
     }
 }

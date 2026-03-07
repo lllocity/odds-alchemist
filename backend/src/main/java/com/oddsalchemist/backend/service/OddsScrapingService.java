@@ -13,7 +13,7 @@ public class OddsScrapingService {
     private static final Logger logger = LoggerFactory.getLogger(OddsScrapingService.class);
 
     public String fetchHtml(String url) throws IOException {
-        logger.info("Fetching HTML from URL: {}", url);
+        logger.info("HTMLを取得中: URL={}", url);
         return Jsoup.connect(url)
                 .userAgent("Mozilla/5.0")
                 .timeout(5000)

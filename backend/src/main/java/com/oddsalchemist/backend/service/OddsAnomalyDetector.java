@@ -55,14 +55,14 @@ public class OddsAnomalyDetector {
 
     /**
      * 前回の単勝オッズを保持するインメモリキャッシュ。
-     * キー: "レース名:馬番"（一意な馬識別子）
+     * キー: "URL:馬番"（同名レースが同日に複数存在しうるため、URLで一意に識別する）
      */
     private final ConcurrentHashMap<String, Double> previousWinOdds = new ConcurrentHashMap<>();
 
     /**
      * その日の初回detect()呼び出し時のオッズを保持するインメモリキャッシュ。
      * putIfAbsent で初回のみ設定され、日次でリセットされる。
-     * キー: "レース名:馬番"
+     * キー: "URL:馬番"
      */
     private final ConcurrentHashMap<String, Double> baselineWinOdds = new ConcurrentHashMap<>();
 
