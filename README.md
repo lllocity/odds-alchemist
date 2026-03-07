@@ -88,6 +88,58 @@ npm run dev
 | `POST` | `/api/odds/targets` | 監視URLを追加（登録直後に即時fetch実行） |
 | `DELETE` | `/api/odds/targets` | 監視URLを削除 |
 
+## 本番運用（Mac でのスケジュール監視）
+
+`./gradlew bootRun` によるフォアグラウンド起動は開発用途向けで、Mac がスリープするとJVMが一時停止しスケジューラーが止まります。
+レース監視を安定して動かすには以下の手順を使用してください。
+
+### 1. JAR をビルド
+
+```bash
+cd backend
+./gradlew bootJar
+# → backend/build/libs/backend-0.0.1-SNAPSHOT.jar が生成される
+```
+
+### 2. スリープ抑制しながらバックグラウンド起動
+
+```bash
+mkdir -p backend/logs
+caffeinate -i nohup java -jar backend/build/libs/backend-0.0.1-SNAPSHOT.jar \
+  > backend/logs/app.log 2>&1 &
+echo "PID: $!"  # プロセスIDを控えておく
+```
+
+- `caffeinate -i`：起動中はMacのスリープを抑制する
+- `nohup ... &`：ターミナルを閉じてもプロセスを継続する
+- ログは `backend/logs/app.log` に出力される
+
+### 3. ログの確認
+
+```bash
+tail -f backend/logs/app.log
+```
+
+### 4. 停止
+
+```bash
+# 起動時に表示されたPIDで停止
+kill <PID>
+
+# PIDを忘れた場合
+lsof -ti:8080 | xargs kill
+```
+
+### 起動方法の比較
+
+| 方法 | スリープ耐性 | 用途 |
+|---|---|---|
+| `./gradlew bootRun` | なし | 開発のみ |
+| `nohup java -jar &` | なし（スリープで停止） | 簡易バックグラウンド |
+| `caffeinate -i` + `java -jar` | あり | レース当日の本番監視 |
+
+> **注意**: `caffeinate` はプロセスが動いている間、Mac のシステムスリープを抑制します。バッテリー駆動時は電源アダプタの接続を推奨します。
+
 ## 開発
 
 ```bash
