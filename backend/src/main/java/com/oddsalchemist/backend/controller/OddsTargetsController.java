@@ -9,10 +9,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -28,7 +24,6 @@ import java.util.concurrent.CompletableFuture;
 public class OddsTargetsController {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsTargetsController.class);
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final TargetUrlStore targetUrlStore;
     private final OddsSyncService oddsSyncService;
@@ -77,12 +72,7 @@ public class OddsTargetsController {
             try {
                 int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
                 logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
-                scheduler.reschedule();
-                Instant rescheduled = scheduler.getNextScheduledTime();
-                String rescheduledTime = rescheduled != null
-                        ? LocalDateTime.ofInstant(rescheduled, ZoneId.systemDefault()).format(TIME_FORMATTER)
-                        : "未定";
-                logger.info("再スケジュール完了: 次回定期実行予定: {}", rescheduledTime);
+                scheduler.scheduleUrl(url);
             } catch (Exception e) {
                 logger.warn("初回スクレイピング失敗: URL={}", url, e);
             }
@@ -109,6 +99,7 @@ public class OddsTargetsController {
         if (!removed) {
             return ResponseEntity.badRequest().body(Map.of("message", "URLが見つかりません: " + url));
         }
+        scheduler.cancelUrl(url);
         return ResponseEntity.ok(Map.of("message", "URLを削除しました", "urls", targetUrlStore.getUrls()));
     }
 }

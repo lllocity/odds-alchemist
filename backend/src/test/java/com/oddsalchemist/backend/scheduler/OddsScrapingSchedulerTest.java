@@ -151,21 +151,4 @@ class OddsScrapingSchedulerTest {
         assertThat(delay).isEqualTo(OddsScrapingScheduler.DELAY_30MIN);
     }
 
-    @Test
-    void calculateDelay_複数URLのうち最短の遅延が選択されること() {
-        String url1 = "https://example.com/race/1";
-        String url2 = "https://example.com/race/2";
-        when(targetUrlStore.getUrls()).thenReturn(List.of(url1, url2));
-        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
-
-        // URL1: 発走15:00, 現在14:55 → 残り5分 → 1分間隔
-        // URL2: 発走17:00, 現在14:55 → 残り125分 → 15分間隔
-        // → 最小 = 1分
-        when(oddsSyncService.getCachedStartTime(url1)).thenReturn(Optional.of(LocalTime.of(15, 0)));
-        when(oddsSyncService.getCachedStartTime(url2)).thenReturn(Optional.of(LocalTime.of(17, 0)));
-
-        Duration delay = scheduler.calculateDelay(LocalTime.of(14, 55));
-
-        assertThat(delay).isEqualTo(OddsScrapingScheduler.DELAY_1MIN);
-    }
 }

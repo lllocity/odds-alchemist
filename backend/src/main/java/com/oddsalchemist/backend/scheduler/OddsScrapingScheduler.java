@@ -18,11 +18,12 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
 /**
  * 定期的にオッズ情報を取得してスプレッドシートに保存するスケジューラー。
- * レース発走時刻からの残り時間に応じて実行間隔を動的に切り替える:
+ * URLごとに独立したスケジュールを持ち、各レースの発走時刻に応じて実行間隔を動的に切り替える:
  * <ul>
  *   <li>朝〜12:00 または発走時刻不明: 30分間隔</li>
  *   <li>12:00〜発走60分超前: 15分間隔</li>
@@ -34,6 +35,7 @@ import java.util.concurrent.ScheduledFuture;
 public class OddsScrapingScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsScrapingScheduler.class);
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     static final Duration DELAY_30MIN = Duration.ofMinutes(30);
     static final Duration DELAY_15MIN = Duration.ofMinutes(15);
@@ -44,8 +46,9 @@ public class OddsScrapingScheduler {
     private final ScrapingProperties properties;
     private final TargetUrlStore targetUrlStore;
     private final ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
-    private volatile Instant nextScheduledTime;
-    private volatile ScheduledFuture<?> currentTask;
+
+    /** URLごとの定期スケジュールタスク（キー: URL文字列） */
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> taskMap = new ConcurrentHashMap<>();
 
     public OddsScrapingScheduler(OddsSyncService oddsSyncService, ScrapingProperties properties,
                                   TargetUrlStore targetUrlStore) {
@@ -55,15 +58,15 @@ public class OddsScrapingScheduler {
     }
 
     /**
-     * アプリ起動後にスケジューラーを初期化し、初回実行をスケジュールします。
+     * アプリ起動後にスケジューラーを初期化します。
+     * URLの登録は起動時に空のため、各URLのスケジュールは scheduleUrl() 呼び出し時に開始されます。
      */
     @PostConstruct
     public void start() {
-        taskScheduler.setPoolSize(1);
+        taskScheduler.setPoolSize(4);
         taskScheduler.setThreadNamePrefix("odds-scheduler-");
         taskScheduler.initialize();
-        logger.info("スケジューラー初期化完了: 初回実行を{}後にスケジュール", DELAY_30MIN);
-        scheduleNext();
+        logger.info("スケジューラー初期化完了");
     }
 
     /**
@@ -76,49 +79,55 @@ public class OddsScrapingScheduler {
     }
 
     /**
-     * 次回実行をスケジュールします。
-     * scrapeAllTargets 完了後に呼び出され、動的な間隔で自己連鎖します。
-     * debugIntervalMinutes が 0 より大きい場合はその値で固定します。
+     * 指定URLの定期スクレイピングをスケジュールします。
+     * 既存のスケジュールがあればキャンセルして再スケジュールします。
+     * URL登録後の即時fetch完了時に呼び出すことで、発走時刻に応じた動的間隔を即時反映させます。
+     *
+     * @param url スケジュール対象URL
      */
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
-
-    private void scheduleNext() {
+    public void scheduleUrl(String url) {
+        ScheduledFuture<?> existing = taskMap.get(url);
+        if (existing != null && !existing.isDone()) {
+            existing.cancel(false);
+        }
         Duration delay = properties.debugIntervalMinutes() > 0
                 ? Duration.ofMinutes(properties.debugIntervalMinutes())
-                : calculateDelay(LocalTime.now());
-        nextScheduledTime = Instant.now().plus(delay);
-        String nextRunTime = LocalDateTime.ofInstant(nextScheduledTime, ZoneId.systemDefault()).format(TIME_FORMATTER);
-        logger.info("次回スクレイピングを{}後にスケジュール（予定時刻: {}）", delay, nextRunTime);
-        currentTask = taskScheduler.schedule(this::runAndReschedule, nextScheduledTime);
+                : calculateDelayForUrl(url, LocalTime.now());
+        Instant nextTime = Instant.now().plus(delay);
+        String nextRunTime = LocalDateTime.ofInstant(nextTime, ZoneId.systemDefault()).format(TIME_FORMATTER);
+        logger.info("スケジュール登録: URL={}, {}後（予定時刻: {}）", url, delay, nextRunTime);
+        ScheduledFuture<?> task = taskScheduler.schedule(() -> scrapeAndReschedule(url), nextTime);
+        taskMap.put(url, task);
     }
 
     /**
-     * 既存のスケジュールをキャンセルし、現在の発走時刻キャッシュを元に再スケジュールします。
-     * URL登録後の即時fetch完了時に呼び出すことで、動的間隔を即時反映させます。
+     * 指定URLの定期スクレイピングスケジュールをキャンセルします。
+     * URL削除時に呼び出します。
+     *
+     * @param url キャンセル対象URL
      */
-    public synchronized void reschedule() {
-        if (currentTask != null && !currentTask.isDone()) {
-            currentTask.cancel(false);
-            logger.info("既存のスケジュールをキャンセルし、再スケジュールします");
+    public void cancelUrl(String url) {
+        ScheduledFuture<?> task = taskMap.remove(url);
+        if (task != null && !task.isDone()) {
+            task.cancel(false);
+            logger.info("スケジュールキャンセル: URL={}", url);
         }
-        scheduleNext();
     }
 
     /**
-     * 次回スケジュール実行の予定時刻を返します。
+     * 指定URLをスクレイピングし、完了後に次回スケジュールを登録します。
+     * URLがすでに削除されていた場合は再スケジュールしません。
      */
-    public Instant getNextScheduledTime() {
-        return nextScheduledTime;
-    }
-
-    /**
-     * スクレイピングを実行し、完了後に次回をスケジュールします。
-     */
-    private void runAndReschedule() {
+    private void scrapeAndReschedule(String url) {
         try {
-            scrapeAllTargets();
+            int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
+            logger.info("定期スクレイピング完了: URL={}, 保存件数={}", url, saved);
+        } catch (Exception e) {
+            logger.error("定期スクレイピング失敗: URL={}", url, e);
         } finally {
-            scheduleNext();
+            if (targetUrlStore.getUrls().contains(url)) {
+                scheduleUrl(url);
+            }
         }
     }
 
@@ -128,7 +137,7 @@ public class OddsScrapingScheduler {
      */
     public void scrapeAllTargets() {
         int urlCount = targetUrlStore.getUrls().size();
-        logger.info("定期スクレイピング開始: 対象URL数={}", urlCount);
+        logger.info("スクレイピング開始: 対象URL数={}", urlCount);
 
         for (String url : targetUrlStore.getUrls()) {
             try {
@@ -139,21 +148,7 @@ public class OddsScrapingScheduler {
             }
         }
 
-        logger.info("定期スクレイピング全完了: 対象URL数={}", urlCount);
-    }
-
-    /**
-     * 全対象URLの発走時刻を考慮し、最短の遅延時間を返します。
-     * URLが1件もない場合はデフォルトの30分を返します。
-     *
-     * @param now 現在時刻（テストで時刻を注入するための引数）
-     * @return 次回実行までの待機時間
-     */
-    Duration calculateDelay(LocalTime now) {
-        return targetUrlStore.getUrls().stream()
-                .map(url -> calculateDelayForUrl(url, now))
-                .min(Duration::compareTo)
-                .orElse(DELAY_30MIN);
+        logger.info("スクレイピング全完了: 対象URL数={}", urlCount);
     }
 
     /**

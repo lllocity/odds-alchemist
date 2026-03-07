@@ -135,8 +135,7 @@ public class OddsAnomalyDetector {
             validList.forEach(d -> previousWinOdds.put(buildKey(d.raceName(), d.horseNumber()), d.winOdds()));
         }
 
-        // 最新アラートリストを更新
-        latestAlerts.clear();
+        // 検知したアラートを累積リストに追加（起動後の全検知履歴を保持）
         latestAlerts.addAll(alerts);
 
         return Collections.unmodifiableList(alerts);
