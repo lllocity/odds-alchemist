@@ -34,7 +34,7 @@ export default function Home() {
         return;
       }
       const data: AnomalyAlert[] = await response.json();
-      setAlerts(data);
+      setAlerts([...data].reverse());
       setLastUpdated(new Date());
     } catch (error) {
       console.warn('アラート取得中にエラーが発生しました', error);
