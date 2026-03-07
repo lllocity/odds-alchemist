@@ -3,11 +3,11 @@ package com.oddsalchemist.backend.scheduler;
 import com.oddsalchemist.backend.config.ScrapingProperties;
 import com.oddsalchemist.backend.service.OddsSyncService;
 import com.oddsalchemist.backend.service.TargetUrlStore;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -27,7 +27,7 @@ import java.util.Optional;
  * </ul>
  */
 @Component
-public class OddsScrapingScheduler implements SchedulingConfigurer {
+public class OddsScrapingScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsScrapingScheduler.class);
 
@@ -39,6 +39,7 @@ public class OddsScrapingScheduler implements SchedulingConfigurer {
     private final OddsSyncService oddsSyncService;
     private final ScrapingProperties properties;
     private final TargetUrlStore targetUrlStore;
+    private final ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
 
     public OddsScrapingScheduler(OddsSyncService oddsSyncService, ScrapingProperties properties,
                                   TargetUrlStore targetUrlStore) {
@@ -48,26 +49,45 @@ public class OddsScrapingScheduler implements SchedulingConfigurer {
     }
 
     /**
-     * 動的スケジューリングを設定します。
-     * 前回実行完了時刻 + 動的に算出した遅延時間 = 次回実行時刻 となるよう Trigger を登録します。
+     * アプリ起動後にスケジューラーを初期化し、初回実行をスケジュールします。
      */
-    @Override
-    public void configureTasks(ScheduledTaskRegistrar registrar) {
-        ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
+    @PostConstruct
+    public void start() {
         taskScheduler.setPoolSize(1);
         taskScheduler.setThreadNamePrefix("odds-scheduler-");
         taskScheduler.initialize();
-        registrar.setTaskScheduler(taskScheduler);
+        logger.info("スケジューラー初期化完了: 初回実行を{}後にスケジュール", DELAY_30MIN);
+        scheduleNext();
+    }
 
-        registrar.addTriggerTask(
-                this::scrapeAllTargets,
-                triggerContext -> {
-                    Instant base = triggerContext.lastCompletion() != null
-                            ? triggerContext.lastCompletion()
-                            : Instant.now();
-                    return base.plus(calculateDelay(LocalTime.now()));
-                }
-        );
+    /**
+     * アプリ終了時にスケジューラーをシャットダウンします。
+     */
+    @PreDestroy
+    public void stop() {
+        taskScheduler.shutdown();
+        logger.info("スケジューラーをシャットダウンしました");
+    }
+
+    /**
+     * 次回実行をスケジュールします。
+     * scrapeAllTargets 完了後に呼び出され、動的な間隔で自己連鎖します。
+     */
+    private void scheduleNext() {
+        Duration delay = calculateDelay(LocalTime.now());
+        logger.info("次回スクレイピングを{}後にスケジュール", delay);
+        taskScheduler.schedule(this::runAndReschedule, Instant.now().plus(delay));
+    }
+
+    /**
+     * スクレイピングを実行し、完了後に次回をスケジュールします。
+     */
+    private void runAndReschedule() {
+        try {
+            scrapeAllTargets();
+        } finally {
+            scheduleNext();
+        }
     }
 
     /**
