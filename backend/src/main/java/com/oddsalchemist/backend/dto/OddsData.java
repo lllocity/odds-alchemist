@@ -9,5 +9,6 @@ public record OddsData(
     String horseName,
     Double winOdds,
     Double placeOddsMin,
-    Double placeOddsMax
+    Double placeOddsMax,
+    String url
 ) {}

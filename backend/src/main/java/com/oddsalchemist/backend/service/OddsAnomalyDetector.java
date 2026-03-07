@@ -112,14 +112,14 @@ public class OddsAnomalyDetector {
             // 上位3番人気の除外対象キーセット（単勝1〜3位）
             Set<String> top3Keys = sortedByWin.stream()
                     .limit(3)
-                    .map(d -> buildKey(d.raceName(), d.horseNumber()))
+                    .map(d -> buildKey(d.url(), d.horseNumber()))
                     .collect(Collectors.toSet());
 
             // 単勝順位マップ（キー: "レース名:馬番", 値: 1始まりの順位）
             Map<String, Integer> winRankMap = new HashMap<>();
             for (int i = 0; i < sortedByWin.size(); i++) {
                 OddsData d = sortedByWin.get(i);
-                winRankMap.put(buildKey(d.raceName(), d.horseNumber()), i + 1);
+                winRankMap.put(buildKey(d.url(), d.horseNumber()), i + 1);
             }
 
             // ロジックA: 支持率急増検知
@@ -132,7 +132,7 @@ public class OddsAnomalyDetector {
             detectTrendDeviation(validList, top3Keys, winRankMap, alerts);
 
             // 前回データを更新（上位3番人気を含む全有効馬）
-            validList.forEach(d -> previousWinOdds.put(buildKey(d.raceName(), d.horseNumber()), d.winOdds()));
+            validList.forEach(d -> previousWinOdds.put(buildKey(d.url(), d.horseNumber()), d.winOdds()));
         }
 
         // 検知したアラートを累積リストに追加（起動後の全検知履歴を保持）
@@ -153,7 +153,7 @@ public class OddsAnomalyDetector {
             List<AnomalyAlertDto> alerts) {
 
         for (OddsData current : validList) {
-            String key = buildKey(current.raceName(), current.horseNumber());
+            String key = buildKey(current.url(), current.horseNumber());
             if (top3Keys.contains(key)) {
                 continue; // 上位3番人気は除外
             }
@@ -199,11 +199,11 @@ public class OddsAnomalyDetector {
         Map<String, Integer> placeRankMap = new HashMap<>();
         for (int i = 0; i < validPlaceList.size(); i++) {
             OddsData d = validPlaceList.get(i);
-            placeRankMap.put(buildKey(d.raceName(), d.horseNumber()), i + 1);
+            placeRankMap.put(buildKey(d.url(), d.horseNumber()), i + 1);
         }
 
         for (OddsData data : validList) {
-            String key = buildKey(data.raceName(), data.horseNumber());
+            String key = buildKey(data.url(), data.horseNumber());
             if (top3Keys.contains(key)) {
                 continue; // 上位3番人気は除外
             }
@@ -244,7 +244,7 @@ public class OddsAnomalyDetector {
             List<AnomalyAlertDto> alerts) {
 
         for (OddsData current : validList) {
-            String key = buildKey(current.raceName(), current.horseNumber());
+            String key = buildKey(current.url(), current.horseNumber());
             if (top3Keys.contains(key)) {
                 continue; // 上位3番人気は除外
             }
@@ -306,8 +306,8 @@ public class OddsAnomalyDetector {
         return BigDecimal.ONE.divide(BigDecimal.valueOf(odds), SUPPORT_RATE_SCALE, RoundingMode.HALF_UP);
     }
 
-    /** 馬を一意に識別するキーを生成します。 */
-    private String buildKey(String raceName, String horseNumber) {
-        return raceName + ":" + horseNumber;
+    /** 馬を一意に識別するキーを生成します。同一レース名が複数存在しうるためURLで識別します。 */
+    private String buildKey(String url, String horseNumber) {
+        return url + ":" + horseNumber;
     }
 }

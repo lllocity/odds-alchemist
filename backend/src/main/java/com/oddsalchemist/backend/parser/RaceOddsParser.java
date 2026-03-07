@@ -196,7 +196,7 @@ public class RaceOddsParser {
             }
         }
 
-        return new OddsData(raceName, horseNumber, horseName, winOdds, placeMin, placeMax);
+        return new OddsData(raceName, horseNumber, horseName, winOdds, placeMin, placeMax, null);
     }
 
     private Double parseDouble(String s) {

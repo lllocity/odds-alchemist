@@ -21,8 +21,9 @@ class OddsAnomalyDetectorTest {
 
     private OddsAnomalyDetector detector;
 
-    // テスト用のレース名定数
+    // テスト用定数
     private static final String RACE = "第1回東京1レース";
+    private static final String URL  = "https://example.com/race/1";
 
     @BeforeEach
     void setUp() {
@@ -198,7 +199,7 @@ class OddsAnomalyDetectorTest {
     void detect_winOddsがnullの馬がいても例外が発生しないこと() {
         List<OddsData> oddsList = List.of(
                 odds("1", "人気馬A", 1.5, 1.1, 1.3),
-                new OddsData(RACE, "2", "オッズ未定馬", null, null, null),
+                new OddsData(RACE, "2", "オッズ未定馬", null, null, null, URL),
                 odds("3", "人気馬C", 3.0, 1.4, 2.0),
                 odds("5", "穴馬", 10.0, 3.0, 5.0)
         );
@@ -475,6 +476,6 @@ class OddsAnomalyDetectorTest {
     }
 
     private OddsData odds(String number, String name, double win, double placeMin, double placeMax) {
-        return new OddsData(RACE, number, name, win, placeMin, placeMax);
+        return new OddsData(RACE, number, name, win, placeMin, placeMax, URL);
     }
 }

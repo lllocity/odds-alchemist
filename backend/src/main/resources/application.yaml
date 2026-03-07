@@ -7,6 +7,6 @@ odds:
   scraping:
     # 書き込み先スプレッドシートの範囲
     # 実行間隔はレース発走時刻から動的に算出（30分/15分/5分/1分）
-    sheet-range: "OddsData!A:G"
+    sheet-range: "OddsData!A:H"
     # デバッグ用固定間隔（分）: 0=動的間隔（本番）、1以上=その分数で固定（動作確認用）
     debug-interval-minutes: 0

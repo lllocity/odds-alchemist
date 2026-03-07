@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class OddsSyncService {
@@ -57,6 +58,12 @@ public class OddsSyncService {
             return 0; // 変更点: 0件であることをコントローラーに伝える
         }
 
+        // 2.1. パース結果にURLを付与（レースの一意識別にURLを使用）
+        List<OddsData> oddsListWithUrl = oddsList.stream()
+                .map(d -> new OddsData(d.raceName(), d.horseNumber(), d.horseName(),
+                        d.winOdds(), d.placeOddsMin(), d.placeOddsMax(), targetUrl))
+                .collect(Collectors.toList());
+
         // 3. 発走時刻をパースしてキャッシュに保存（次回スケジューリングの間隔算出に使用）
         Optional<LocalTime> startTime = parser.parseStartTime(html);
         cachedStartTimes.put(targetUrl, startTime);
@@ -65,14 +72,14 @@ public class OddsSyncService {
                 () -> logger.warn("発走時刻を取得できませんでした: URL={}", targetUrl));
 
         // 4. 異常検知を実行
-        List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsList);
+        List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsListWithUrl);
         logger.info("異常検知完了: アラート件数={}", alerts.size());
 
         // 4.1. 検知されたアラートをスプレッドシートの "Alerts" シートへ永続化
         saveAlertsToSheet(targetUrl, alerts);
 
         // 5. スプレッドシート用の2次元配列に変換
-        List<List<Object>> values = convertToSheetData(oddsList);
+        List<List<Object>> values = convertToSheetData(oddsListWithUrl);
 
         // 6. スプレッドシートへ書き込み
         sheetsService.appendData(range, values);
@@ -132,12 +139,13 @@ public class OddsSyncService {
         for (OddsData odds : oddsList) {
             List<Object> row = new ArrayList<>();
             row.add(timestamp);                                       // A列: タイムスタンプ
-            row.add(odds.raceName());                                  // B列: レース名
-            row.add(odds.horseNumber());                               // C列: 馬番
-            row.add(odds.horseName());                                 // D列: 馬名
-            row.add(Objects.toString(odds.winOdds(), ""));            // E列: 単勝オッズ
-            row.add(Objects.toString(odds.placeOddsMin(), ""));       // F列: 複勝オッズ（下限）
-            row.add(Objects.toString(odds.placeOddsMax(), ""));       // G列: 複勝オッズ（上限）
+            row.add(odds.url());                                      // B列: 対象URL
+            row.add(odds.raceName());                                  // C列: レース名
+            row.add(odds.horseNumber());                               // D列: 馬番
+            row.add(odds.horseName());                                 // E列: 馬名
+            row.add(Objects.toString(odds.winOdds(), ""));            // F列: 単勝オッズ
+            row.add(Objects.toString(odds.placeOddsMin(), ""));       // G列: 複勝オッズ（下限）
+            row.add(Objects.toString(odds.placeOddsMax(), ""));       // H列: 複勝オッズ（上限）
             values.add(row);
         }
         return values;

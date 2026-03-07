@@ -36,12 +36,12 @@ class OddsSyncServiceTest {
     @Test
     void fetchAndSaveOdds_正常に連携処理が実行されること() throws Exception {
         String url = "https://example.com/race";
-        String range = "OddsData!A:G";
+        String range = "OddsData!A:H";
         String dummyHtml = "<html>dummy</html>";
 
         when(scrapingService.fetchHtml(url)).thenReturn(dummyHtml);
         when(parser.parse(dummyHtml)).thenReturn(List.of(
-                new OddsData("第1回東京1レース", "1", "キタサンブラック", 2.5, 1.2, 1.5)
+                new OddsData("第1回東京1レース", "1", "キタサンブラック", 2.5, 1.2, 1.5, null)
         ));
 
         service.fetchAndSaveOdds(url, range);
@@ -57,9 +57,10 @@ class OddsSyncServiceTest {
         assertThat(savedValues).hasSize(1);
 
         List<Object> row = savedValues.get(0);
-        assertThat(row.get(1)).isEqualTo("第1回東京1レース"); // B列: レース名
-        assertThat(row.get(2)).isEqualTo("1");               // C列: 馬番
-        assertThat(row.get(3)).isEqualTo("キタサンブラック"); // D列: 馬名
+        assertThat(row.get(1)).isEqualTo(url);               // B列: URL
+        assertThat(row.get(2)).isEqualTo("第1回東京1レース"); // C列: レース名
+        assertThat(row.get(3)).isEqualTo("1");               // D列: 馬番
+        assertThat(row.get(4)).isEqualTo("キタサンブラック"); // E列: 馬名
 
         // 異常検知が呼び出されていること
         verify(anomalyDetector).detect(any());
@@ -74,7 +75,7 @@ class OddsSyncServiceTest {
 
         when(scrapingService.fetchHtml(url)).thenReturn(dummyHtml);
         when(parser.parse(dummyHtml)).thenReturn(List.of(
-                new OddsData("第1回東京1レース", "1", "テスト馬", 2.5, 1.2, 1.5)
+                new OddsData("第1回東京1レース", "1", "テスト馬", 2.5, 1.2, 1.5, null)
         ));
         when(parser.parseStartTime(dummyHtml)).thenReturn(Optional.of(startTime));
 
