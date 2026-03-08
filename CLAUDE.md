@@ -32,7 +32,7 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 ## 監視ダッシュボード（Spring Boot Admin）
 - **URL**: `http://localhost:8080/admin`（Spring Boot Admin UI）
 - ログストリーム・ヘルス・メモリ・スレッド等をブラウザで確認可能
-- `backend/logs/app.log` にログファイル出力（Admin UI 上でリアルタイム閲覧可能）
+- `/tmp/odds-alchemist/app.log` にログファイル出力（Admin UI 上でリアルタイム閲覧可能）
 - `spring.boot.admin.client.url` には `http://localhost:8080/admin`（context-path 含む）を設定すること
 
 ## 実装時の参照ドキュメント

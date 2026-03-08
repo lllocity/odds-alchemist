@@ -53,7 +53,7 @@
 - `spring.boot.admin.context-path=/admin` で Admin UI のパスを `/admin` に設定（`/api/**` との競合を回避）。
 - `spring.boot.admin.client.url` には context-path を含む完全なURLを指定すること: `http://localhost:8080/admin`。
 - `management.endpoints.web.exposure.include=*` で Actuator エンドポイントを全公開する。
-- `logging.file.name=logs/app.log` でログをファイル出力すると Admin UI 上でログストリームが確認できる。
+- `logging.file.name=/tmp/odds-alchemist/app.log` でログをファイル出力すると Admin UI 上でログストリームが確認できる（絶対パス指定で起動ディレクトリに依存しない）。
 - Spring Boot Admin 4.0.0 は Spring Security を含まないため、追加の Security 設定は不要。
 - Admin UI アクセス: `http://localhost:8080/admin`
 

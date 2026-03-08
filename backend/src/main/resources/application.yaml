@@ -21,7 +21,8 @@ management:
 logging:
   file:
     # Spring Boot AdminでログストリームをUI上で確認できるようファイル出力を設定
-    name: logs/app.log
+    # 絶対パス指定（相対パスは起動ディレクトリに依存するため）
+    name: /tmp/odds-alchemist/app.log
 
 odds:
   scraping:

@@ -87,7 +87,7 @@ http://localhost:8080/admin
 ```
 
 - **稼働状況**: アプリのヘルスチェック・メモリ・スレッド等をリアルタイム確認
-- **ログストリーム**: `backend/logs/app.log` のログを画面上でリアルタイム閲覧（tail -f 相当）
+- **ログストリーム**: `/tmp/odds-alchemist/app.log` のログを画面上でリアルタイム閲覧（tail -f 相当）
 - **Beans / Metrics**: 登録済みSpring Beanや各種メトリクスの参照
 
 ## API エンドポイント
@@ -116,20 +116,19 @@ cd backend
 ### 2. スリープ抑制しながらバックグラウンド起動
 
 ```bash
-mkdir -p backend/logs
 caffeinate -i nohup java -jar backend/build/libs/backend-0.0.1-SNAPSHOT.jar \
-  > backend/logs/app.log 2>&1 &
+  > /dev/null 2>&1 &
 echo "PID: $!"  # プロセスIDを控えておく
 ```
 
 - `caffeinate -i`：起動中はMacのスリープを抑制する
 - `nohup ... &`：ターミナルを閉じてもプロセスを継続する
-- ログは `backend/logs/app.log` に出力される
+- ログは `/tmp/odds-alchemist/app.log` に出力される（起動ディレクトリに依存しない絶対パス）
 
 ### 3. ログの確認
 
 ```bash
-tail -f backend/logs/app.log
+tail -f /tmp/odds-alchemist/app.log
 ```
 
 ### 4. 停止
