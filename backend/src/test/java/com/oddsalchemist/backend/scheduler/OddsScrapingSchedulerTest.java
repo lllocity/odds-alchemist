@@ -238,7 +238,7 @@ class OddsScrapingSchedulerTest {
     @Test
     void scrapeAndReschedule_完了後にupdateExecutionTimesとpersistToSheetが呼ばれること() throws Exception {
         String url = "https://example.com/race/1";
-        when(targetUrlStore.getUrls()).thenReturn(List.of(url));
+        when(targetUrlStore.containsUrl(url)).thenReturn(true);
         when(oddsSyncService.fetchAndSaveOdds(eq(url), any())).thenReturn(3);
         when(oddsSyncService.getCachedStartTime(url)).thenReturn(Optional.empty());
 

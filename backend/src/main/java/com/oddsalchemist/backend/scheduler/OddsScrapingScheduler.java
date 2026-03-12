@@ -107,16 +107,7 @@ public class OddsScrapingScheduler {
                 taskMap.put(url, task);
             } else {
                 logger.info("起動時URL復元: 即時フェッチ開始 URL={}", url);
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
-                        logger.info("復元URL初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
-                        scheduleUrl(url);
-                        updateAndPersistExecutionTimes(url);
-                    } catch (Exception e) {
-                        logger.warn("復元URL初回スクレイピング失敗: URL={}", url, e);
-                    }
-                });
+                fetchAndScheduleAsync(url);
             }
         }
     }
@@ -178,7 +169,7 @@ public class OddsScrapingScheduler {
         } catch (Exception e) {
             logger.error("定期スクレイピング失敗: URL={}", url, e);
         } finally {
-            if (targetUrlStore.getUrls().contains(url)) {
+            if (targetUrlStore.containsUrl(url)) {
                 scheduleUrl(url);
                 updateAndPersistExecutionTimes(url);
             }
@@ -190,13 +181,31 @@ public class OddsScrapingScheduler {
      * スクレイピング完了直後（定期実行・初回登録どちらも）に呼び出します。
      */
     public void updateAndPersistExecutionTimes(String url) {
-        String lastExecution = LocalDateTime.now().format(EXEC_TIME_FORMATTER);
+        LocalDateTime now = LocalDateTime.now();
+        String lastExecution = now.format(EXEC_TIME_FORMATTER);
         Duration nextDelay = properties.debugIntervalMinutes() > 0
                 ? Duration.ofMinutes(properties.debugIntervalMinutes())
-                : calculateDelayForUrl(url, LocalTime.now());
-        String nextScheduled = LocalDateTime.now().plus(nextDelay).format(EXEC_TIME_FORMATTER);
+                : calculateDelayForUrl(url, now.toLocalTime());
+        String nextScheduled = now.plus(nextDelay).format(EXEC_TIME_FORMATTER);
         targetUrlStore.updateExecutionTimes(url, lastExecution, nextScheduled);
         targetUrlStore.persistToSheet();
+    }
+
+    /**
+     * 指定URLのスクレイピングを非同期で即時実行し、完了後にスケジュールと実行時刻を更新します。
+     * URL新規登録時・起動時復元の即時フェッチ時に呼び出します。
+     */
+    public void fetchAndScheduleAsync(String url) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
+                logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
+                scheduleUrl(url);
+                updateAndPersistExecutionTimes(url);
+            } catch (Exception e) {
+                logger.warn("初回スクレイピング失敗: URL={}", url, e);
+            }
+        });
     }
 
     /**
@@ -204,10 +213,10 @@ public class OddsScrapingScheduler {
      * 失敗してもシステムを止めず、次のURLの処理を継続します。
      */
     public void scrapeAllTargets() {
-        int urlCount = targetUrlStore.getUrls().size();
-        logger.info("スクレイピング開始: 対象URL数={}", urlCount);
+        List<String> urls = targetUrlStore.getUrls();
+        logger.info("スクレイピング開始: 対象URL数={}", urls.size());
 
-        for (String url : targetUrlStore.getUrls()) {
+        for (String url : urls) {
             try {
                 int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
                 logger.info("スクレイピング完了: URL={}, 保存件数={}", url, saved);
@@ -216,7 +225,7 @@ public class OddsScrapingScheduler {
             }
         }
 
-        logger.info("スクレイピング全完了: 対象URL数={}", urlCount);
+        logger.info("スクレイピング全完了: 対象URL数={}", urls.size());
     }
 
     /**

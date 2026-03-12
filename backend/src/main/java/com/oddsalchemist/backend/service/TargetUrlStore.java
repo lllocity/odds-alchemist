@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -63,6 +64,13 @@ public class TargetUrlStore {
      */
     public List<String> getUrls() {
         return Collections.unmodifiableList(new ArrayList<>(urlMap.keySet()));
+    }
+
+    /**
+     * 指定URLが登録済みかを返します。
+     */
+    public boolean containsUrl(String url) {
+        return urlMap.containsKey(url);
     }
 
     /**
@@ -140,8 +148,8 @@ public class TargetUrlStore {
             for (TargetUrlInfo info : urlMap.values()) {
                 rows.add(List.of(
                         info.url(),
-                        info.lastExecutionTime() != null ? info.lastExecutionTime() : "",
-                        info.nextScheduledTime() != null ? info.nextScheduledTime() : ""));
+                        Objects.requireNonNullElse(info.lastExecutionTime(), ""),
+                        Objects.requireNonNullElse(info.nextScheduledTime(), "")));
             }
             googleSheetsService.clearAndWriteData(TARGETS_RANGE, rows);
         } catch (Exception e) {

@@ -1,6 +1,5 @@
 package com.oddsalchemist.backend.controller;
 
-import com.oddsalchemist.backend.config.ScrapingProperties;
 import com.oddsalchemist.backend.scheduler.OddsScrapingScheduler;
 import com.oddsalchemist.backend.service.OddsSyncService;
 import com.oddsalchemist.backend.service.TargetUrlStore;
@@ -11,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 import static com.oddsalchemist.backend.service.TargetUrlStore.TargetUrlInfo;
 
@@ -29,14 +27,12 @@ public class OddsTargetsController {
 
     private final TargetUrlStore targetUrlStore;
     private final OddsSyncService oddsSyncService;
-    private final ScrapingProperties properties;
     private final OddsScrapingScheduler scheduler;
 
     public OddsTargetsController(TargetUrlStore targetUrlStore, OddsSyncService oddsSyncService,
-                                  ScrapingProperties properties, OddsScrapingScheduler scheduler) {
+                                  OddsScrapingScheduler scheduler) {
         this.targetUrlStore = targetUrlStore;
         this.oddsSyncService = oddsSyncService;
-        this.properties = properties;
         this.scheduler = scheduler;
     }
 
@@ -70,16 +66,7 @@ public class OddsTargetsController {
         }
 
         // 登録直後に初回スクレイピングを非同期で実行（次回定期実行を待たずに即時取得）
-        CompletableFuture.runAsync(() -> {
-            try {
-                int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
-                logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
-                scheduler.scheduleUrl(url);
-                scheduler.updateAndPersistExecutionTimes(url);
-            } catch (Exception e) {
-                logger.warn("初回スクレイピング失敗: URL={}", url, e);
-            }
-        });
+        scheduler.fetchAndScheduleAsync(url);
 
         return ResponseEntity.ok(Map.of("message", "URLを登録しました", "urls", targetUrlStore.getUrls()));
     }
