@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -24,6 +25,37 @@ public class GoogleSheetsService {
             @Value("${google.sheets.spreadsheet-id}") String spreadsheetId) {
         this.sheetsService = sheetsService;
         this.spreadsheetId = spreadsheetId;
+    }
+
+    /**
+     * スプレッドシートの指定レンジのデータを読み込みます。
+     * 値が存在しない場合は空リストを返します。
+     */
+    public List<List<Object>> readData(String range) throws IOException {
+        var response = sheetsService.spreadsheets().values()
+                .get(spreadsheetId, range)
+                .execute();
+        List<List<Object>> values = response.getValues();
+        return values != null ? values : Collections.emptyList();
+    }
+
+    /**
+     * 指定レンジをクリアしてからデータを書き込みます。
+     * values が空の場合はクリアのみ行います。
+     */
+    public void clearAndWriteData(String range, List<List<Object>> values) throws IOException {
+        sheetsService.spreadsheets().values()
+                .clear(spreadsheetId, range, new com.google.api.services.sheets.v4.model.ClearValuesRequest())
+                .execute();
+        if (values.isEmpty()) {
+            return;
+        }
+        ValueRange body = new ValueRange().setValues(values);
+        sheetsService.spreadsheets().values()
+                .update(spreadsheetId, range, body)
+                .setValueInputOption(VALUE_INPUT_OPTION)
+                .execute();
+        logger.info("Sheetsへの上書き完了: range={}, 件数={}", range, values.size());
     }
 
     /**

@@ -8,12 +8,16 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class OddsScrapingSchedulerTest {
@@ -178,6 +182,87 @@ class OddsScrapingSchedulerTest {
         scheduler.cancelUrl("https://example.com/race/unknown");
 
         // 例外が発生しなければテスト通過
+    }
+
+    // ===== restoreFromStore のテスト =====
+
+    @Test
+    void restoreFromStore_次回予定時刻が未設定の場合は即時フェッチが開始されること() throws Exception {
+        String url = "https://example.com/race/1";
+        when(targetUrlStore.getUrls()).thenReturn(List.of(url));
+        when(targetUrlStore.getNextScheduledTime(url)).thenReturn(Optional.empty());
+        when(oddsSyncService.fetchAndSaveOdds(eq(url), any())).thenReturn(5);
+        when(oddsSyncService.getCachedStartTime(url)).thenReturn(Optional.empty());
+
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
+        scheduler.start();
+        try {
+            scheduler.restoreFromStore();
+            verify(oddsSyncService, timeout(2000)).fetchAndSaveOdds(url, "OddsData!A:H");
+        } finally {
+            scheduler.stop();
+        }
+    }
+
+    @Test
+    void restoreFromStore_次回予定時刻が未来の場合は即時フェッチしないこと() throws Exception {
+        String url = "https://example.com/race/1";
+        String futureTime = LocalDateTime.now().plusMinutes(30)
+                .format(DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"));
+        when(targetUrlStore.getUrls()).thenReturn(List.of(url));
+        when(targetUrlStore.getNextScheduledTime(url)).thenReturn(Optional.of(futureTime));
+
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
+        scheduler.start();
+        try {
+            scheduler.restoreFromStore();
+            // 即時fetchは呼ばれないこと（予定時刻まで待機）
+            verifyNoInteractions(oddsSyncService);
+        } finally {
+            scheduler.stop();
+        }
+    }
+
+    @Test
+    void restoreFromStore_URLが0件の場合はスクレイピングされないこと() {
+        when(targetUrlStore.getUrls()).thenReturn(List.of());
+
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
+        scheduler.restoreFromStore();
+
+        verifyNoInteractions(oddsSyncService);
+    }
+
+    // ===== scrapeAndReschedule のテスト =====
+
+    @Test
+    void scrapeAndReschedule_完了後にupdateExecutionTimesとpersistToSheetが呼ばれること() throws Exception {
+        String url = "https://example.com/race/1";
+        when(targetUrlStore.getUrls()).thenReturn(List.of(url));
+        when(oddsSyncService.fetchAndSaveOdds(eq(url), any())).thenReturn(3);
+        when(oddsSyncService.getCachedStartTime(url)).thenReturn(Optional.empty());
+
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
+        scheduler.start();
+        try {
+            scheduler.scrapeAndReschedule(url);
+            verify(targetUrlStore).updateExecutionTimes(eq(url), anyString(), anyString());
+            verify(targetUrlStore).persistToSheet();
+        } finally {
+            scheduler.stop();
+        }
+    }
+
+    @Test
+    void updateAndPersistExecutionTimes_updateExecutionTimesとpersistToSheetが呼ばれること() {
+        String url = "https://example.com/race/1";
+        when(oddsSyncService.getCachedStartTime(url)).thenReturn(Optional.empty());
+
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
+        scheduler.updateAndPersistExecutionTimes(url);
+
+        verify(targetUrlStore).updateExecutionTimes(eq(url), anyString(), anyString());
+        verify(targetUrlStore).persistToSheet();
     }
 
     @Test

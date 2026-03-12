@@ -29,6 +29,7 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 - **即時取得**: フロントエンドから `POST /api/odds/fetch` でワンショットのスクレイピング・検知を実行。
 - **スケジュール監視**: `OddsScrapingScheduler` が `TargetUrlStore` に登録されたURLごとに独立した `ScheduledFuture` を持ち、自己再スケジュール方式で定期実行する。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。URL削除時は `cancelUrl()` でスケジュールも即時停止する。
 - **動的間隔**: 各URLの発走時刻キャッシュを `OddsSyncService.getCachedStartTime()` で参照し、残り時間に応じて 30分/15分/5分/1分 の4段階で間隔を切り替える。
+- **起動時復元**: `OddsScrapingScheduler` が `@EventListener(ApplicationReadyEvent.class)` で `TargetUrlStore.getUrls()` を参照し、各URLの初回スクレイピングを非同期で開始してスケジュールを再開する。
 
 ### 異常検知
 - `OddsAnomalyDetector` がロジックA（支持率急増）・B（順位乖離）・C（トレンド逸脱）を実行。
@@ -37,6 +38,7 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 ### 永続化
 - オッズデータ（A〜H列 8列構成）は `sheetRange` シートへ Append のみ。
 - アラートデータは `Alerts!A:G` シートへ Append のみ。
+- 監視対象URLは `Targets!A:C` シートへ上書き保存（clearAndWriteData）。起動時に `TargetUrlStore.loadFromSheet()` で復元し、再起動後も自動的に監視を再開する。
 
 ### レース識別
 - 同名レースが同日に複数存在しうるため、`OddsData.url` フィールドおよびキャッシュキーはURLで一意識別する。
@@ -52,4 +54,9 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 ---
 
 ## 決定事項・議論ログ
-<!-- 今後の設計判断・背景・却下した選択肢などをここに追記する -->
+
+### Step 19: 監視対象URLの永続化 (2026-03-12)
+- **ストレージ**: Google Sheets の `Targets!A:C` シートへ統一（OddsData / Alerts と同一スプレッドシート）。
+- **`updateExecutionTimes` は `persistToSheet` を呼ばない**: スクレイピング完了ごとに時刻更新＋Sheets書き込みを行うが、その責務は `OddsScrapingScheduler.scrapeAndReschedule()` が担う設計。頻繁な書き込みを一箇所に集約してインメモリの変更とシートへの永続化タイミングを分離した。
+- **`scrapeAndReschedule` を package-private に変更**: `private` のままではテストから直接呼べないため、テスト可能性を優先して変更。Spring の AOP プロキシを通らない内部呼び出しであるため副作用なし。
+- **`@PostConstruct` vs `@EventListener`**: URL読み込みは `TargetUrlStore.@PostConstruct`（DI完了後に即時実行）、スクレイピング再開は `OddsScrapingScheduler.@EventListener(ApplicationReadyEvent)`（Spring Context 完全起動後）で責務を分離した。

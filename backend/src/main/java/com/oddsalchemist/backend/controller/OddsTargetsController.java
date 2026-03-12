@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static com.oddsalchemist.backend.service.TargetUrlStore.TargetUrlInfo;
+
 /**
  * 監視対象URLの動的登録・削除を提供するコントローラー。
  * フロントエンドからURLを登録することで、スケジューラーの対象に即時反映される。
@@ -39,13 +41,13 @@ public class OddsTargetsController {
     }
 
     /**
-     * 登録済みの監視対象URL一覧を返します。
+     * 登録済みの監視対象URL一覧を実行時刻情報付きで返します。
      *
-     * @return URL文字列のリスト（JSON配列）
+     * @return URLと実行時刻情報のリスト（JSON配列）
      */
     @GetMapping("/targets")
-    public ResponseEntity<List<String>> getTargets() {
-        return ResponseEntity.ok(targetUrlStore.getUrls());
+    public ResponseEntity<List<TargetUrlInfo>> getTargets() {
+        return ResponseEntity.ok(targetUrlStore.getUrlInfos());
     }
 
     /**
@@ -73,6 +75,7 @@ public class OddsTargetsController {
                 int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
                 logger.info("初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
                 scheduler.scheduleUrl(url);
+                scheduler.updateAndPersistExecutionTimes(url);
             } catch (Exception e) {
                 logger.warn("初回スクレイピング失敗: URL={}", url, e);
             }

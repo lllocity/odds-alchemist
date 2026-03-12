@@ -12,6 +12,10 @@
 - **データ抽出要件**: 馬番（数値）、馬名（文字列）、単勝オッズ（数値）、複勝オッズ（下限・上限の数値）を確実に抽出する。
 
 ### Google Sheets APIのルール
+- **メソッド一覧**:
+  - `appendData(range, values)`: 末尾追記のみ（OddsData / Alerts 用）
+  - `readData(range)`: データ読み込み（値なしは空リストを返す）
+  - `clearAndWriteData(range, values)`: クリア後に全件上書き（Targets 用）。values が空の場合はクリアのみ。
 - **データマッピング**: `OddsSyncService.java` でスプレッドシートに書き込む際、以下の列順序を厳守すること。
   - **オッズシート**（`sheetRange` で指定、範囲: `OddsData!A:H`）:
     - A列: 取得日時 (形式: `yyyy/MM/dd HH:mm:ss`)
@@ -34,11 +38,16 @@
 - **レース一意識別**: 同名レースが同日に複数存在しうるため、`OddsData.url` フィールドとキャッシュキー（`"URL:馬番"`）はURLで一意識別する。パーサーは `url=null` で返し、`OddsSyncService` が `targetUrl` を付与する。
 
 ### 監視対象URLの管理パターン (TargetUrlStore / OddsScrapingScheduler)
-- `TargetUrlStore` はスレッドセーフな `CopyOnWriteArrayList` でURLを保持する `@Service`。起動時は空。
-- REST API (`OddsTargetsController`) で動的なURL登録・削除のみ行う: `POST/DELETE /api/odds/targets`。
-- URL登録時: 即時fetchを `CompletableFuture.runAsync()` で非同期実行 → 完了後 `scheduler.scheduleUrl(url)` でスケジュール開始。
-- URL削除時: `scheduler.cancelUrl(url)` でスケジュール即時停止 + `oddsSyncService.clearCachedStartTime(url)` でキャッシュクリア。
+- `TargetUrlStore` は `ConcurrentHashMap<String, TargetUrlInfo>` でURLを管理する `@Service`。起動時に `@PostConstruct loadFromSheet()` で `Targets!A:C` シートから復元する。
+- `TargetUrlInfo` は URL・最終実行時間・次回予定時間を持つ内部 record（`null` 許容）。
+- REST API (`OddsTargetsController`) で動的なURL登録・削除を行う: `POST/DELETE /api/odds/targets`。
+- URL登録時: `addUrl()` → `persistToSheet()` で即時 Sheets 反映 → 即時fetchを `CompletableFuture.runAsync()` で非同期実行 → 完了後 `scheduler.scheduleUrl(url)` でスケジュール開始。
+- URL削除時: `removeUrl()` → `persistToSheet()` → `scheduler.cancelUrl(url)` → `oddsSyncService.clearCachedStartTime(url)`。
+- **`persistToSheet()`**: `clearAndWriteData("Targets!A:C", rows)` で全件上書き。失敗時は ERROR ログのみ（インメモリの変更は確定済み）。
+- **`updateExecutionTimes(url, lastExec, nextSched)`**: インメモリのみ更新。`persistToSheet()` は呼ばない（`OddsScrapingScheduler.scrapeAndReschedule()` が責務を担う）。
 - `OddsScrapingScheduler` は URLごとに独立した `ScheduledFuture<?>` を `ConcurrentHashMap<String, ScheduledFuture<?>> taskMap` で管理し、自己再スケジュール方式で動作する。
+- 起動時復元: `@EventListener(ApplicationReadyEvent.class) restoreFromStore()` で `targetUrlStore.getUrls()` を参照し、各URLの初回スクレイピングを非同期で開始してスケジュールを再開する。
+- スクレイピング完了後: `scrapeAndReschedule()` が `updateExecutionTimes()` → `persistToSheet()` を呼んで Sheets の B・C列を更新する。
 - スクレイピング間隔は `OddsSyncService.getCachedStartTime(url)` の発走時刻から動的算出（30分/15分/5分/1分）。
 
 ### アーキテクチャと品質

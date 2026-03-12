@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AlertList from '@/app/components/AlertList';
 import { AnomalyAlert } from '@/app/types/oddsAlert';
+import { TargetUrlInfo } from '@/app/types/targetUrl';
 
 /** アラートをポーリングする間隔（ミリ秒）: スクレイピング最短間隔1分に対し10秒で追従 */
 const POLLING_INTERVAL_MS = 10_000;
@@ -20,10 +21,10 @@ export default function Home() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // ===== スケジュール監視URL管理の状態 =====
-  const [targetUrls, setTargetUrls] = useState<string[]>([]);
+  const [targetUrls, setTargetUrls] = useState<TargetUrlInfo[]>([]);
   const [targetUrlInput, setTargetUrlInput] = useState('');
   const [isRegisteringUrl, setIsRegisteringUrl] = useState(false);
-  const [registerStatus, setRegisterStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [urlActionStatus, setUrlActionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   /** アラート一覧をバックエンドから取得する */
   const fetchAlerts = useCallback(async () => {
@@ -41,7 +42,7 @@ export default function Home() {
     }
   }, [apiBaseUrl]);
 
-  /** 登録済みスケジュール監視URLを取得する */
+  /** 登録済みスケジュール監視URLを実行時刻情報付きで取得する */
   const fetchTargetUrls = useCallback(async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/odds/targets`);
@@ -49,7 +50,7 @@ export default function Home() {
         console.warn(`監視対象URL取得に失敗: ${response.status}`);
         return;
       }
-      const data: string[] = await response.json();
+      const data: TargetUrlInfo[] = await response.json();
       setTargetUrls(data);
     } catch (error) {
       console.warn('監視対象URL取得中にエラー', error);
@@ -91,7 +92,6 @@ export default function Home() {
 
       setStatus({ type: 'success', message: `成功: ${data.message}` });
       setUrl('');
-      // 監視開始後すぐにアラートを更新する
       fetchAlerts();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '予期せぬエラーが発生しました';
@@ -107,7 +107,7 @@ export default function Home() {
     if (!targetUrlInput) return;
 
     setIsRegisteringUrl(true);
-    setRegisterStatus(null);
+    setUrlActionStatus(null);
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/odds/targets`, {
@@ -120,11 +120,11 @@ export default function Home() {
         throw new Error(data.message || '登録エラー');
       }
       setTargetUrlInput('');
-      setTargetUrls(data.urls);
-      setRegisterStatus({ type: 'success', message: 'URLを登録しました' });
+      setUrlActionStatus({ type: 'success', message: 'URLを登録しました' });
+      await fetchTargetUrls();
     } catch (error) {
       const msg = error instanceof Error ? error.message : '予期せぬエラー';
-      setRegisterStatus({ type: 'error', message: msg });
+      setUrlActionStatus({ type: 'error', message: msg });
     } finally {
       setIsRegisteringUrl(false);
     }
@@ -132,6 +132,7 @@ export default function Home() {
 
   /** スケジュール監視URLを削除する */
   const handleRemoveUrl = async (targetUrl: string) => {
+    setUrlActionStatus(null);
     try {
       const response = await fetch(`${apiBaseUrl}/api/odds/targets`, {
         method: 'DELETE',
@@ -140,12 +141,14 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) {
-        console.warn('URL削除エラー:', data.message);
+        setUrlActionStatus({ type: 'error', message: data.message || 'URL削除エラー' });
         return;
       }
-      setTargetUrls(data.urls);
+      setUrlActionStatus({ type: 'success', message: 'URLを削除しました' });
+      await fetchTargetUrls();
     } catch (error) {
-      console.warn('URL削除中にエラー', error);
+      const msg = error instanceof Error ? error.message : '予期せぬエラー';
+      setUrlActionStatus({ type: 'error', message: msg });
     }
   };
 
@@ -153,53 +156,9 @@ export default function Home() {
     <main className="min-h-screen bg-gray-50 flex flex-col items-center p-6 pt-12">
       <div className="max-w-xl w-full space-y-6">
 
-        {/* 即時取得パネル */}
-        <div className="bg-white rounded-xl shadow-md p-8">
-          <h1 className="text-2xl font-bold text-gray-800 text-center mb-6">
-            Odds Alchemist
-          </h1>
-
-          <form onSubmit={handleStartMonitoring} className="space-y-4">
-            <div>
-              <label htmlFor="race-url" className="block text-sm font-medium text-gray-700 mb-1">
-                対象レースのURL（即時取得）
-              </label>
-              <input
-                type="url"
-                id="race-url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://sports.yahoo.co.jp/keiba/race/odds/tfw/..."
-                className="w-full px-4 py-2 border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading || !url}
-              className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors
-                ${isLoading || !url
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-                }`}
-            >
-              {isLoading ? '処理中...' : '監視を開始する'}
-            </button>
-          </form>
-
-          {status && (
-            <div className={`mt-6 p-4 rounded-md text-sm ${
-              status.type === 'error'
-                ? 'bg-red-50 text-red-800'
-                : status.type === 'success'
-                  ? 'bg-green-50 text-green-800'
-                  : 'bg-blue-50 text-blue-800'
-            }`}>
-              {status.message}
-            </div>
-          )}
-        </div>
+        <h1 className="text-2xl font-bold text-gray-800 text-center">
+          Odds Alchemist
+        </h1>
 
         {/* スケジュール監視対象URL管理パネル */}
         <div className="bg-white rounded-xl shadow-md p-6">
@@ -229,11 +188,11 @@ export default function Home() {
             </button>
           </form>
 
-          {registerStatus && (
+          {urlActionStatus && (
             <div className={`mb-3 p-2 rounded text-xs ${
-              registerStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
+              urlActionStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
             }`}>
-              {registerStatus.message}
+              {urlActionStatus.message}
             </div>
           )}
 
@@ -242,16 +201,22 @@ export default function Home() {
               登録済みのURLはありません
             </p>
           ) : (
-            <ul className="space-y-1.5">
-              {targetUrls.map((u) => (
+            <ul className="space-y-2">
+              {targetUrls.map((info) => (
                 <li
-                  key={u}
-                  className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded px-3 py-2"
+                  key={info.url}
+                  className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded px-3 py-2"
                 >
-                  <span className="flex-1 truncate">{u}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="block truncate text-gray-800">{info.url}</span>
+                    <div className="mt-1 flex gap-4 text-gray-400">
+                      <span>最終実行: {info.lastExecutionTime ?? '未実行'}</span>
+                      <span>次回予定: {info.nextScheduledTime ?? '未設定'}</span>
+                    </div>
+                  </div>
                   <button
-                    onClick={() => handleRemoveUrl(u)}
-                    className="shrink-0 text-red-500 hover:text-red-700 font-medium"
+                    onClick={() => handleRemoveUrl(info.url)}
+                    className="shrink-0 text-red-500 hover:text-red-700 font-medium mt-0.5"
                   >
                     削除
                   </button>
@@ -260,6 +225,55 @@ export default function Home() {
             </ul>
           )}
         </div>
+
+        {/* 即時取得パネル（折りたたみ） */}
+        <details className="bg-white rounded-xl shadow-md">
+          <summary className="px-6 py-4 cursor-pointer text-sm font-medium text-gray-500 select-none list-none flex items-center gap-1">
+            <span className="text-gray-400">▶</span>
+            即時取得（手動スクレイピング）
+          </summary>
+          <div className="px-8 pb-8 pt-2 space-y-4">
+            <form onSubmit={handleStartMonitoring} className="space-y-4">
+              <div>
+                <label htmlFor="race-url" className="block text-sm font-medium text-gray-700 mb-1">
+                  対象レースのURL
+                </label>
+                <input
+                  type="url"
+                  id="race-url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://sports.yahoo.co.jp/keiba/race/odds/tfw/..."
+                  className="w-full px-4 py-2 border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isLoading || !url}
+                className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors
+                  ${isLoading || !url
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+                  }`}
+              >
+                {isLoading ? '処理中...' : '取得する'}
+              </button>
+            </form>
+
+            {status && (
+              <div className={`p-4 rounded-md text-sm ${
+                status.type === 'error'
+                  ? 'bg-red-50 text-red-800'
+                  : status.type === 'success'
+                    ? 'bg-green-50 text-green-800'
+                    : 'bg-blue-50 text-blue-800'
+              }`}>
+                {status.message}
+              </div>
+            )}
+          </div>
+        </details>
 
         {/* アラート一覧パネル */}
         <div className="bg-white rounded-xl shadow-md p-6">

@@ -7,6 +7,8 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +19,9 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
@@ -36,6 +40,7 @@ public class OddsScrapingScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsScrapingScheduler.class);
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter EXEC_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     static final Duration DELAY_30MIN = Duration.ofMinutes(30);
     static final Duration DELAY_15MIN = Duration.ofMinutes(15);
@@ -67,6 +72,53 @@ public class OddsScrapingScheduler {
         taskScheduler.setThreadNamePrefix("odds-scheduler-");
         taskScheduler.initialize();
         logger.info("スケジューラー初期化完了");
+    }
+
+    /**
+     * Spring Context の完全起動後に、Sheets から復元した監視対象URLをスケジュールします。
+     * 次回予定時刻が未来であればその時刻にスケジュール（即時 fetch しない）。
+     * 次回予定時刻が未設定・過去であれば即時 fetch 後にスケジュールします。
+     * URLが0件の場合はログを出力して終了します。
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void restoreFromStore() {
+        List<String> urls = targetUrlStore.getUrls();
+        if (urls.isEmpty()) {
+            logger.info("起動時URL復元: 登録済みURLなし");
+            return;
+        }
+        logger.info("起動時URL復元: {}件のURLを処理します", urls.size());
+        for (String url : urls) {
+            LocalDateTime nextScheduled = targetUrlStore.getNextScheduledTime(url)
+                    .flatMap(s -> {
+                        try {
+                            return Optional.of(LocalDateTime.parse(s, EXEC_TIME_FORMATTER));
+                        } catch (Exception e) {
+                            logger.warn("次回予定時刻のパース失敗: URL={}, value={}", url, s);
+                            return Optional.empty();
+                        }
+                    })
+                    .orElse(null);
+
+            if (nextScheduled != null && nextScheduled.isAfter(LocalDateTime.now())) {
+                Instant scheduledInstant = nextScheduled.atZone(ZoneId.systemDefault()).toInstant();
+                logger.info("起動時URL復元: 予定時刻にスケジュール URL={}, 予定={}", url, nextScheduled.format(EXEC_TIME_FORMATTER));
+                ScheduledFuture<?> task = taskScheduler.schedule(() -> scrapeAndReschedule(url), scheduledInstant);
+                taskMap.put(url, task);
+            } else {
+                logger.info("起動時URL復元: 即時フェッチ開始 URL={}", url);
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
+                        logger.info("復元URL初回スクレイピング完了: URL={}, 保存件数={}", url, saved);
+                        scheduleUrl(url);
+                        updateAndPersistExecutionTimes(url);
+                    } catch (Exception e) {
+                        logger.warn("復元URL初回スクレイピング失敗: URL={}", url, e);
+                    }
+                });
+            }
+        }
     }
 
     /**
@@ -117,8 +169,9 @@ public class OddsScrapingScheduler {
     /**
      * 指定URLをスクレイピングし、完了後に次回スケジュールを登録します。
      * URLがすでに削除されていた場合は再スケジュールしません。
+     * スクレイピング完了後に実行時刻を更新して Sheets へ永続化します。
      */
-    private void scrapeAndReschedule(String url) {
+    void scrapeAndReschedule(String url) {
         try {
             int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
             logger.info("定期スクレイピング完了: URL={}, 保存件数={}", url, saved);
@@ -127,8 +180,23 @@ public class OddsScrapingScheduler {
         } finally {
             if (targetUrlStore.getUrls().contains(url)) {
                 scheduleUrl(url);
+                updateAndPersistExecutionTimes(url);
             }
         }
+    }
+
+    /**
+     * 指定URLの最終実行時刻と次回予定時刻を計算してインメモリとSheetsへ反映します。
+     * スクレイピング完了直後（定期実行・初回登録どちらも）に呼び出します。
+     */
+    public void updateAndPersistExecutionTimes(String url) {
+        String lastExecution = LocalDateTime.now().format(EXEC_TIME_FORMATTER);
+        Duration nextDelay = properties.debugIntervalMinutes() > 0
+                ? Duration.ofMinutes(properties.debugIntervalMinutes())
+                : calculateDelayForUrl(url, LocalTime.now());
+        String nextScheduled = LocalDateTime.now().plus(nextDelay).format(EXEC_TIME_FORMATTER);
+        targetUrlStore.updateExecutionTimes(url, lastExecution, nextScheduled);
+        targetUrlStore.persistToSheet();
     }
 
     /**
