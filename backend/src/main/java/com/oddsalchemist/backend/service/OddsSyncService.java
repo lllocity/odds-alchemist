@@ -28,16 +28,19 @@ public class OddsSyncService {
     private final RaceOddsParser parser;
     private final GoogleSheetsService sheetsService;
     private final OddsAnomalyDetector anomalyDetector;
+    private final SlackNotifyClient slackNotifyClient;
 
     /** URL別の発走時刻キャッシュ（スクレイピングのたびに更新） */
     private final ConcurrentHashMap<String, Optional<LocalTime>> cachedStartTimes = new ConcurrentHashMap<>();
 
     public OddsSyncService(OddsScrapingService scrapingService, RaceOddsParser parser,
-                           GoogleSheetsService sheetsService, OddsAnomalyDetector anomalyDetector) {
+                           GoogleSheetsService sheetsService, OddsAnomalyDetector anomalyDetector,
+                           SlackNotifyClient slackNotifyClient) {
         this.scrapingService = scrapingService;
         this.parser = parser;
         this.sheetsService = sheetsService;
         this.anomalyDetector = anomalyDetector;
+        this.slackNotifyClient = slackNotifyClient;
     }
 
     /**
@@ -77,6 +80,9 @@ public class OddsSyncService {
 
         // 4.1. 検知されたアラートをスプレッドシートの "Alerts" シートへ永続化
         saveAlertsToSheet(targetUrl, alerts);
+
+        // 4.2. 未通知のアラートをSlackへ送信（送信済みキャッシュで初回検知のみ）
+        slackNotifyClient.notify(alerts, targetUrl);
 
         // 5. スプレッドシート用の2次元配列に変換
         List<List<Object>> values = convertToSheetData(oddsListWithUrl);

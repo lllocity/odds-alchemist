@@ -24,6 +24,12 @@ logging:
     # 絶対パス指定（相対パスは起動ディレクトリに依存するため）
     name: /tmp/odds-alchemist/app.log
 
+slack:
+  # false にすると通知を無効化（開発・テスト時の誤通知防止）
+  enabled: true
+  # 実際の値は application-secret.yaml で上書き
+  webhook-url: ""
+
 odds:
   scraping:
     # 書き込み先スプレッドシートの範囲

@@ -26,7 +26,7 @@ const ALERT_TYPE_CONFIG: Record<AlertType, {
     bg: 'bg-purple-100',
     text: 'text-purple-800',
     label: 'トレンド逸脱',
-    description: '朝イチ基準値からの支持率増加が +5.0% 以上（5〜12番人気の中穴・大穴帯）',
+    description: '当日初回基準値からの支持率増加が +5.0% 以上（5〜12番人気の中穴・大穴帯）',
     formatValue: (v) => `+${(v * 100).toFixed(1)}%`,
   },
 };

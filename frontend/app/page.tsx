@@ -64,9 +64,11 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [fetchAlerts]);
 
-  /** 初回マウント時に登録済みURLを取得 */
+  /** 初回マウント時に登録済みURLを取得し、以降はポーリングで実行時刻を更新 */
   useEffect(() => {
     fetchTargetUrls();
+    const timer = setInterval(fetchTargetUrls, POLLING_INTERVAL_MS);
+    return () => clearInterval(timer);
   }, [fetchTargetUrls]);
 
   /** 即時取得（手動スクレイピング） */

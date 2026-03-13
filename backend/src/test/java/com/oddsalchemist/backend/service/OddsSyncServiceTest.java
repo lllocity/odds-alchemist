@@ -22,6 +22,7 @@ class OddsSyncServiceTest {
     private RaceOddsParser parser;
     private GoogleSheetsService sheetsService;
     private OddsAnomalyDetector anomalyDetector;
+    private SlackNotifyClient slackNotifyClient;
     private OddsSyncService service;
 
     @BeforeEach
@@ -30,8 +31,9 @@ class OddsSyncServiceTest {
         parser = mock(RaceOddsParser.class);
         sheetsService = mock(GoogleSheetsService.class);
         anomalyDetector = mock(OddsAnomalyDetector.class);
+        slackNotifyClient = mock(SlackNotifyClient.class);
         when(anomalyDetector.detect(any())).thenReturn(List.of());
-        service = new OddsSyncService(scrapingService, parser, sheetsService, anomalyDetector);
+        service = new OddsSyncService(scrapingService, parser, sheetsService, anomalyDetector, slackNotifyClient);
     }
 
     @Test

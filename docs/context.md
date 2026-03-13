@@ -55,6 +55,12 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 
 ## 決定事項・議論ログ
 
+### Step 20: Slack Webhook通知連携 設計レビュー (2026-03-13)
+- **LINE Notify → Slack Incoming Webhook に変更**: LINE Notify は 2025年3月31日にサービス終了済みのため使用不可。Slack Incoming Webhook を採用（Webhook URL 1本で POST するだけで完結）。
+- **スクレイピングとアラート通知の分離**: `OddsAnomalyDetector.detect()` は毎回全アラートを返す（Sheets・フロントエンド用）。通知の絞り込みは `SlackNotifyClient` が担い、検知ロジックに送信済み管理を混入させない。
+- **初回検知のみ通知（日次ユニーク）**: 重複送信防止キー = `"URL:馬番:alertType:yyyy-MM-dd"`。同日に同条件が何度検知されても Slack 通知は1回のみ。通信失敗時はキャッシュに追加せず次回再試行対象とする。
+- **集約ポリシー**: 1スクレイピングで複数アラートが出た場合は1通にまとめて送信（スパム防止）。
+
 ### Step 19: 監視対象URLの永続化 (2026-03-12)
 - **ストレージ**: Google Sheets の `Targets!A:C` シートへ統一（OddsData / Alerts と同一スプレッドシート）。
 - **`updateExecutionTimes` は `persistToSheet` を呼ばない**: スクレイピング完了ごとに時刻更新＋Sheets書き込みを行うが、その責務は `OddsScrapingScheduler.scrapeAndReschedule()` が担う設計。頻繁な書き込みを一箇所に集約してインメモリの変更とシートへの永続化タイミングを分離した。
