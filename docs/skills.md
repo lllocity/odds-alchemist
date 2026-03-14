@@ -58,16 +58,6 @@
 - 各 `@RestController` に `@CrossOrigin(origins = "http://localhost:3000")` を付与するシンプルなパターンを採用している。
 - 複数のコントローラーが同じ `/api/odds` パスを共有してもSpringは正常に処理できる（HTTPメソッドとパスの組み合わせが一意であればよい）。
 
-### Spring Boot Admin の設定パターン
-- `de.codecentric:spring-boot-admin-starter-server:4.0.0` と `spring-boot-admin-starter-client:4.0.0` を使用。
-- メインクラスに `@EnableAdminServer` を付与する。
-- `spring.boot.admin.context-path=/admin` で Admin UI のパスを `/admin` に設定（`/api/**` との競合を回避）。
-- `spring.boot.admin.client.url` には context-path を含む完全なURLを指定すること: `http://localhost:8080/admin`。
-- `management.endpoints.web.exposure.include=*` で Actuator エンドポイントを全公開する。
-- `logging.file.name=/tmp/odds-alchemist/app.log` でログをファイル出力すると Admin UI 上でログストリームが確認できる（絶対パス指定で起動ディレクトリに依存しない）。
-- Spring Boot Admin 4.0.0 は Spring Security を含まないため、追加の Security 設定は不要。
-- Admin UI アクセス: `http://localhost:8080/admin`
-
 ### Spring Boot バージョン注意事項
 - 本プロジェクトは **Spring Boot 4.0.x** を使用している（Jackson 3 / `tools.jackson.*` 名前空間）。
 - `application.yaml` の `spring.jackson.serialization` によるJackson設定はSpring Boot 4では正常に機能しない場合がある。Jackson の挙動を変更したい場合は Java の `@Configuration` クラスで行うか、DTOフィールドを `String` 型に変換してサービス層でフォーマットする方針を取ること。

@@ -45,15 +45,16 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 
 ---
 
-## 監視ダッシュボード（Spring Boot Admin）
-- **URL**: `http://localhost:8080/admin`
-- ログストリーム・ヘルス・メモリ・スレッド等をブラウザで確認可能。
-- `/tmp/odds-alchemist/app.log` にログファイル出力（Admin UI 上でリアルタイム閲覧可能）。
-- `spring.boot.admin.client.url` には `http://localhost:8080/admin`（context-path 含む）を設定すること。
-
 ---
 
 ## 決定事項・議論ログ
+
+### Step 21: Docker化 設計レビュー (2026-03-15)
+- **`application-secret.yaml` の扱い**: Slack Webhook URL は `SPRING_SLACK_WEBHOOK__URL` 環境変数でオーバーライド。Spring Boot の環境変数→プロパティ変換ルール（`.` → `_`、大文字化）を利用する。
+- **Spring Boot Admin client URL**: コンテナ内では `localhost` は自分自身を指さない。`docker-compose.yml` の `environment` で `SPRING_BOOT_ADMIN_CLIENT_URL=http://backend:8080/admin`（Compose サービス名）にオーバーライドする。
+- **永続化ボリューム**: Step 19 で永続化は Google Sheets に統一済み。ローカルDBのマウントは不要。ログファイル `/tmp/odds-alchemist/app.log` のみ `./logs` にマウントする。
+- **`depends_on` に healthcheck 条件を追加**: `condition: service_healthy` + `/actuator/health` ポーリングで、Spring Boot が本当に Ready になってからフロントエンドを起動する。
+- **Next.js standalone モード**: `next.config.js` に `output: 'standalone'` を設定し、実行イメージを最小化する。
 
 ### Step 20: Slack Webhook通知連携 設計レビュー (2026-03-13)
 - **LINE Notify → Slack Incoming Webhook に変更**: LINE Notify は 2025年3月31日にサービス終了済みのため使用不可。Slack Incoming Webhook を採用（Webhook URL 1本で POST するだけで完結）。

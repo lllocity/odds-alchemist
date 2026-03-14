@@ -28,12 +28,10 @@ dependencies {
     implementation("com.google.oauth-client:google-oauth-client-jetty:1.34.1")
     implementation("com.google.apis:google-api-services-sheets:v4-rev20230815-2.0.0")
 
-	// Spring Boot Admin（監視ダッシュボード）
-	implementation("de.codecentric:spring-boot-admin-starter-server:4.0.0")
-	implementation("de.codecentric:spring-boot-admin-starter-client:4.0.0")
+	// Actuator（Docker healthcheck 用に /actuator/health を公開）
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
