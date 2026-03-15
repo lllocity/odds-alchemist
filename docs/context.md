@@ -49,6 +49,15 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 
 ## 決定事項・議論ログ
 
+### Step 21: Docker化 実装完了 (2026-03-15)
+
+**作成ファイル**: `backend/Dockerfile`、`frontend/Dockerfile`、`docker-compose.yml`、`.env.example`、`docs/setup_guide.md`
+**変更ファイル**: `frontend/next.config.ts`（`output: 'standalone'` 追加）、`README.md`（Docker 起動手順を主軸に更新）、`.gitignore`（`.env` / `logs/` 追加）
+
+**起動コマンド**: `docker compose up --build`（初回 / コード変更時）、`docker compose up`（2回目以降）
+
+**設計決定事項**（レビュー時と同じ）:
+
 ### Step 21: Docker化 設計レビュー (2026-03-15)
 - **`application-secret.yaml` の扱い**: Slack Webhook URL は `SPRING_SLACK_WEBHOOK__URL` 環境変数でオーバーライド。Spring Boot の環境変数→プロパティ変換ルール（`.` → `_`、大文字化）を利用する。
 - **Spring Boot Admin client URL**: コンテナ内では `localhost` は自分自身を指さない。`docker-compose.yml` の `environment` で `SPRING_BOOT_ADMIN_CLIENT_URL=http://backend:8080/admin`（Compose サービス名）にオーバーライドする。

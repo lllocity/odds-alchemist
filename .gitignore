@@ -1,6 +1,10 @@
 ### macOS ###
 .DS_Store
 
+### Docker ###
+.env
+logs/
+
 ### VS Code ###
 .vscode/
 *.code-workspace
