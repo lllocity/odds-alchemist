@@ -117,18 +117,36 @@ public class SlackNotifyClient {
 
     private String buildMessage(List<AnomalyAlertDto> alerts, String targetUrl) {
         StringBuilder sb = new StringBuilder();
-        sb.append("<!channel> 【オッズアラート】").append(alerts.size()).append("件検知\n");
-        sb.append("URL: ").append(targetUrl).append("\n");
+        sb.append("<!channel>\n");
+        sb.append("🏇 *").append(alerts.size()).append("頭に動きあり！今すぐチェック*\n");
+        sb.append(targetUrl).append("\n");
 
-        for (int i = 0; i < alerts.size(); i++) {
-            AnomalyAlertDto alert = alerts.get(i);
-            sb.append("\n").append(i + 1).append(". [").append(alert.alertType()).append("] ")
-              .append(alert.raceName()).append("\n");
-            sb.append("   馬番: ").append(alert.horseNumber())
-              .append(" / 馬名: ").append(alert.horseName()).append("\n");
-            sb.append("   数値: ").append(alert.value()).append("\n");
+        for (AnomalyAlertDto alert : alerts) {
+            sb.append("\n");
+            sb.append(alertEmoji(alert.alertType())).append(" *").append(alert.horseName())
+              .append("*（").append(alert.horseNumber()).append("番）\n");
+            sb.append("　").append(alert.raceName()).append("\n");
+            sb.append("　").append(alertCaption(alert.alertType(), alert.value())).append("\n");
         }
 
         return sb.toString();
+    }
+
+    private String alertEmoji(String alertType) {
+        return switch (alertType) {
+            case "支持率急増"   -> "🔥";
+            case "順位乖離"     -> "⚡";
+            case "トレンド逸脱" -> "📈";
+            default             -> "🎯";
+        };
+    }
+
+    private String alertCaption(String alertType, double value) {
+        return switch (alertType) {
+            case "支持率急増"   -> String.format("支持率が %.1f%% 急上昇中！", value * 100);
+            case "順位乖離"     -> String.format("単複ギャップ %.0f 位分の歪み、複勝が美味しいかも", value);
+            case "トレンド逸脱" -> String.format("今日イチの動き、支持率 +%.1f%% 乖離", value * 100);
+            default             -> String.format("数値: %s", value);
+        };
     }
 }
