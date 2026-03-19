@@ -49,6 +49,33 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 
 ## 決定事項・議論ログ
 
+### Step 22: オッズ推移グラフ 実装完了 (2026-03-19)
+
+**作成ファイル（バックエンド）**:
+- `backend/.../dto/HorseDto.java` — 馬番・馬名の DTO
+- `backend/.../dto/OddsHistoryItemDto.java` — オッズ時系列 1件の DTO（detectedAt, winOdds, placeOddsMin, placeOddsMax）
+- `backend/.../service/OddsHistoryService.java` — OddsData!A:H を読み込み、URL一覧・馬一覧・時系列データを返す
+- `backend/.../controller/OddsHistoryController.java` — `/api/odds/history/urls`, `/api/odds/history/horses`, `/api/odds/history`
+
+**作成ファイル（フロントエンド）**:
+- `frontend/app/types/oddsHistory.ts` — OddsHistoryItem / HorseOption 型定義
+- `frontend/app/components/OddsTrendChart.tsx` — URL・馬名カスケードドロップダウン + Recharts 折れ線グラフ
+
+**変更ファイル**: `frontend/app/page.tsx`（OddsTrendChart をアラート一覧の下に追加）
+
+**設計決定事項**:
+- OddsData は当日分のみ・数千行以下のため Sheets 全件読み込みで許容
+- グラフライブラリは Recharts を採用（Next.js App Router との相性◎、スタンダード）
+- 3エンドポイント方式（URL一覧 → 馬一覧 → 時系列）でカスケードドロップダウンを実現
+- Sheets API 失敗時は `try-catch` + `WARN` ログのみ、空リストを返してシステムを止めない
+- データ削除後は「該当データがありません」メッセージをフロントエンドで表示
+
+**テスト件数**: 合計88件（BUILD SUCCESSFUL 確認済み）
+- OddsHistoryServiceTest: 新規作成 → 8件
+- OddsHistoryControllerTest: 新規作成 → 4件（Step 22）
+
+---
+
 ### Step 21: Docker化 実装完了 (2026-03-15)
 
 **作成ファイル**: `backend/Dockerfile`、`frontend/Dockerfile`、`docker-compose.yml`、`.env.example`、`docs/setup_guide.md`

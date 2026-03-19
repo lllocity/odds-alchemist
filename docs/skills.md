@@ -86,6 +86,19 @@
 - 未知の検知タイプには `?? fallback` でデフォルトスタイルを適用し、型エラーを防ぐ。
 - 値の単位は検知タイプによって異なる（支持率急増・トレンド逸脱: `%` 表示、順位乖離: 整数のランク差）ため、`formatValue: (v: number) => string` をConfig内に定義してロジックを分散させない。
 
+### Recharts グラフのパターン（Next.js App Router）
+- コンポーネントに `'use client'` を付与すること（Recharts は SSR 非対応）
+- `ResponsiveContainer width="100%" height={300}` でレスポンシブ対応
+- `Tooltip` の `formatter` / `labelFormatter` の型は Recharts 内部型が strict なため `any` を使用すること（`number | string` では不足する場合あり）
+- `Line` の `connectNulls` を設定すると null 値があっても線が途切れない
+- X軸に文字列の日時を渡す場合は `tickFormatter` で `"HH:mm"` 形式に変換する
+- `dataKey` は TypeScript 型のフィールド名と一致させること
+
+### カスケードドロップダウンのパターン（URL → 馬）
+- URLドロップダウン変更時に `setSelectedHorse('')` / `setHorses([])` / `setChartData(null)` をリセットすること
+- 馬ドロップダウンは URL が選択済みの場合のみ有効化（`disabled={!selectedUrl || horses.length === 0}`）
+- API 呼び出しは `encodeURIComponent(url)` でクエリパラメータをエスケープすること
+
 ### フロントエンドのURL管理パターン
 - `GET /api/odds/targets` で登録済みURL一覧を取得し、初回マウント時に `useEffect` + `fetchTargetUrls` で読み込む。
 - `POST /api/odds/targets` でURL登録（body: `{ url: string }`）、`DELETE /api/odds/targets` でURL削除（body: `{ url: string }`）。
