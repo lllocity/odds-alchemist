@@ -6,6 +6,7 @@ services:
     env_file: .env
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-key.json
+      TZ: Asia/Tokyo
     volumes:
       # Google 認証 JSON のマウント（イメージに含めない）
       - ${GCP_KEY_PATH}:/app/secrets/gcp-key.json:ro
@@ -25,6 +26,8 @@ services:
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
     ports:
       - "3000:3000"
+    environment:
+      TZ: Asia/Tokyo
     depends_on:
       backend:
         # バックエンドの healthcheck が UP になってから起動する
