@@ -4,6 +4,7 @@
 ### Docker ###
 .env
 logs/
+.caffeinate.pid
 
 ### VS Code ###
 .vscode/
