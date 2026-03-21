@@ -96,33 +96,27 @@ SPRING_SLACK_ENABLED=true
 ## ⑦ 起動
 
 ```bash
-./start.sh up --build   # 初回 / コード変更時
-./start.sh up           # 2回目以降
+./start.sh          # 通常起動（バックグラウンド）
+./start.sh --build  # 初回 / コード変更時
 ```
 
 - フロントエンド: http://localhost:3000
 - バックエンド API: http://localhost:8080
 
-バックエンドの起動が完了するまで（約30秒）フロントエンドは自動で待機する。`start.sh` は `caffeinate -i` と組み合わせており、実行中は Mac のスリープを抑制する。
+`start.sh` はバックグラウンドで Docker Compose を起動し、`caffeinate -i` で Mac のスリープを抑制する。起動成功時は `✅ 起動成功` と表示される。
 
 ---
 
 ## ⑧ 日常的な操作
 
 ```bash
-# ターミナルをバックグラウンドに切り離す（コンテナは動き続ける）
-# 起動後に表示されるメニューで d キーを押す
-
-# ログを再表示する
+# ログを確認する
 docker compose logs -f           # 全サービス
 docker compose logs -f backend   # バックエンドのみ
 docker compose logs -f frontend  # フロントエンドのみ
 
-# 停止（コンテナを削除）
-./start.sh down
-
-# 再起動（ビルド済みイメージを再利用、コード変更なしの場合）
-./start.sh up
+# 停止（コンテナ削除 + スリープ抑制解除）
+./stop.sh
 ```
 
 ---

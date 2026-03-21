@@ -81,7 +81,7 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 **作成ファイル**: `backend/Dockerfile`、`frontend/Dockerfile`、`docker-compose.yml`、`.env.example`、`docs/setup_guide.md`
 **変更ファイル**: `frontend/next.config.ts`（`output: 'standalone'` 追加）、`README.md`（Docker 起動手順を主軸に更新）、`.gitignore`（`.env` / `logs/` 追加）
 
-**起動コマンド**: `docker compose up --build`（初回 / コード変更時）、`docker compose up`（2回目以降）
+**起動コマンド**: `./start.sh --build`（初回 / コード変更時）、`./start.sh`（2回目以降）、`./stop.sh`（停止）
 
 **設計決定事項**（レビュー時と同じ）:
 
