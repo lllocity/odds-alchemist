@@ -2,9 +2,30 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { OddsHistoryItem, HorseOption } from '@/app/types/oddsHistory';
+import { AnomalyAlert, AlertType } from '@/app/types/oddsAlert';
+
+const ALERT_COLORS: Record<AlertType, string> = {
+  '支持率急増': '#f97316',
+  '順位乖離': '#7c3aed',
+  'トレンド逸脱': '#dc2626',
+};
+
+const ALERT_SHORT: Record<AlertType, string> = {
+  '支持率急増': '急増',
+  '順位乖離': '乖離',
+  'トレンド逸脱': '逸脱',
+};
+
+type AlertMarker = { x: string; type: AlertType; value: number };
+
+/** "yyyy/MM/dd HH:mm:ss" → Date */
+function parseDataAt(s: string): Date {
+  return new Date(s.replace(/\//g, '-').replace(' ', 'T'));
+}
 
 export default function OddsTrendChart() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
@@ -16,6 +37,7 @@ export default function OddsTrendChart() {
   const [selectedHorse, setSelectedHorse] = useState('');
 
   const [chartData, setChartData] = useState<OddsHistoryItem[] | null>(null);
+  const [alertMarkers, setAlertMarkers] = useState<AlertMarker[]>([]);
   const [isLoadingUrls, setIsLoadingUrls] = useState(true);
   const [isLoadingHorses, setIsLoadingHorses] = useState(false);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
@@ -48,6 +70,7 @@ export default function OddsTrendChart() {
     setSelectedHorse('');
     setHorses([]);
     setChartData(null);
+    setAlertMarkers([]);
     setErrorMessage(null);
 
     if (!url) return;
@@ -69,23 +92,62 @@ export default function OddsTrendChart() {
     }
   }, [apiBaseUrl]);
 
-  /** グラフ表示ボタン押下時にオッズ時系列を取得 */
+  /** グラフ表示ボタン押下時にオッズ時系列とアラートを取得 */
   const handleShowChart = async () => {
     if (!selectedUrl || !selectedHorse) return;
 
     setIsLoadingChart(true);
     setChartData(null);
+    setAlertMarkers([]);
     setErrorMessage(null);
 
     try {
       const params = new URLSearchParams({ url: selectedUrl, horseName: selectedHorse });
-      const res = await fetch(`${apiBaseUrl}/api/odds/history?${params}`);
-      if (!res.ok) throw new Error(`オッズデータ取得失敗: ${res.status}`);
-      const data: OddsHistoryItem[] = await res.json();
+      const [oddsRes, alertsRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/odds/history?${params}`),
+        fetch(`${apiBaseUrl}/api/odds/alerts`),
+      ]);
+      if (!oddsRes.ok) throw new Error(`オッズデータ取得失敗: ${oddsRes.status}`);
+
+      const data: OddsHistoryItem[] = await oddsRes.json();
       if (data.length === 0) {
         setErrorMessage('該当データがありません。シートのデータが削除されている可能性があります');
-      } else {
-        setChartData(data);
+        return;
+      }
+
+      // 時系列順にソート
+      const sorted = [...data].sort(
+        (a, b) => parseDataAt(a.detectedAt).getTime() - parseDataAt(b.detectedAt).getTime()
+      );
+      setChartData(sorted);
+
+      // アラートマーカーの計算（馬名一致 + グラフ時間範囲内）
+      if (alertsRes.ok) {
+        const allAlerts: AnomalyAlert[] = await alertsRes.json();
+        const startMs = parseDataAt(sorted[0].detectedAt).getTime();
+        const endMs = parseDataAt(sorted[sorted.length - 1].detectedAt).getTime();
+
+        const relevant = allAlerts.filter((a) => {
+          if (a.horseName !== selectedHorse) return false;
+          const t = new Date(a.detectedAt).getTime();
+          return t >= startMs - 60_000 && t <= endMs + 60_000;
+        });
+
+        const markers: AlertMarker[] = relevant.map((a) => {
+          // アラート時刻に最も近いchartDataのdetectedAtを探す
+          const alertMs = new Date(a.detectedAt).getTime();
+          let nearest = sorted[0].detectedAt;
+          let minDiff = Infinity;
+          for (const item of sorted) {
+            const diff = Math.abs(parseDataAt(item.detectedAt).getTime() - alertMs);
+            if (diff < minDiff) {
+              minDiff = diff;
+              nearest = item.detectedAt;
+            }
+          }
+          return { x: nearest, type: a.alertType, value: a.value };
+        });
+        setAlertMarkers(markers);
       }
     } catch (e) {
       console.warn('オッズ時系列の取得に失敗しました', e);
@@ -139,6 +201,7 @@ export default function OddsTrendChart() {
             onChange={(e) => {
               setSelectedHorse(e.target.value);
               setChartData(null);
+              setAlertMarkers([]);
               setErrorMessage(null);
             }}
             disabled={!selectedUrl || horses.length === 0}
@@ -179,7 +242,7 @@ export default function OddsTrendChart() {
             {selectedHorse}（{chartData.length}件）
           </p>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <LineChart data={chartData} margin={{ top: 16, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis
                 dataKey="detectedAt"
@@ -200,6 +263,20 @@ export default function OddsTrendChart() {
                 contentStyle={{ fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
+              {alertMarkers.map((marker, i) => (
+                <ReferenceLine
+                  key={i}
+                  x={marker.x}
+                  stroke={ALERT_COLORS[marker.type]}
+                  strokeDasharray="4 2"
+                  label={{
+                    value: ALERT_SHORT[marker.type],
+                    fill: ALERT_COLORS[marker.type],
+                    fontSize: 10,
+                    position: 'insideTopRight',
+                  }}
+                />
+              ))}
               <Line
                 type="monotone"
                 dataKey="winOdds"
@@ -230,6 +307,23 @@ export default function OddsTrendChart() {
               />
             </LineChart>
           </ResponsiveContainer>
+
+          {/* アラート凡例 */}
+          {alertMarkers.length > 0 && (
+            <div className="flex flex-wrap gap-3 justify-center mt-2">
+              {(Object.keys(ALERT_COLORS) as AlertType[])
+                .filter((type) => alertMarkers.some((m) => m.type === type))
+                .map((type) => (
+                  <span key={type} className="flex items-center gap-1 text-xs text-gray-600">
+                    <span
+                      className="inline-block w-4 border-t-2"
+                      style={{ borderColor: ALERT_COLORS[type], borderStyle: 'dashed' }}
+                    />
+                    {type}
+                  </span>
+                ))}
+            </div>
+          )}
         </div>
       )}
     </div>
