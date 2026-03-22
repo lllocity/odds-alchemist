@@ -8,9 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import com.oddsalchemist.backend.util.SheetsDates;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 public class OddsSyncService {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsSyncService.class);
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     private final OddsScrapingService scrapingService;
     private final RaceOddsParser parser;
@@ -150,7 +149,7 @@ public class OddsSyncService {
 
     private List<List<Object>> convertToSheetData(List<OddsData> oddsList) {
         List<List<Object>> values = new ArrayList<>();
-        String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMATTER);
+        String timestamp = LocalDateTime.now().format(SheetsDates.FORMATTER);
 
         for (OddsData odds : oddsList) {
             List<Object> row = new ArrayList<>();

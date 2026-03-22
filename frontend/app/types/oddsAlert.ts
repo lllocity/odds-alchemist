@@ -3,7 +3,7 @@
  * フィールド名・型はバックエンドのJavaレコードと必ず一致させること。
  *
  * alertType の値は OddsAnomalyDetector が生成する文字列リテラルに合わせる。
- * detectedAt は Spring Boot の Jackson 設定により ISO-8601 文字列で渡される。
+ * detectedAt の形式は "yyyy/MM/dd HH:mm:ss"。
  */
 export type AlertType = '支持率急増' | '順位乖離' | 'トレンド逸脱';
 
@@ -20,4 +20,5 @@ export interface AnomalyAlert {
   value: number;
   /** 検知時刻（形式: "yyyy/MM/dd HH:mm:ss"） */
   detectedAt: string;
+
 }

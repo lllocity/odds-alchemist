@@ -17,10 +17,7 @@ const ALERT_COLORS: Record<AlertType, string> = {
 
 type AlertMarker = { x: string; type: AlertType; value: number };
 
-/**
- * Sheets日時文字列 ("yyyy/MM/dd HH:mm:ss" または過去データの "yyyy/M/d H:mm:ss") を Date に変換。
- * ISO文字列に変換すると単一桁時が無効形式になるため、フィールドを個別にパースする。
- */
+/** Sheets日時文字列 ("yyyy/MM/dd HH:mm:ss") を Date に変換する */
 function parseDataAt(s: string): Date {
   const [datePart, timePart] = s.split(' ');
   const [y, m, d] = datePart.split('/').map(Number);
@@ -152,15 +149,11 @@ export default function OddsTrendChart() {
     ? new Set(chartData.map((item) => item.detectedAt.split(' ')[0])).size > 1
     : false;
 
-  /**
-   * X軸ラベル: "yyyy/M/d H:mm:ss" → 単日: "HH:mm" / 複数日: "M/d HH:mm"
-   * Sheetsがゼロなし形式で返すため、時を padStart で補正する
-   */
+  /** X軸ラベル: "yyyy/MM/dd HH:mm:ss" → 単日: "HH:mm" / 複数日: "M/d HH:mm" */
   const formatTime = (value: string) => {
     const parts = value.split(' ');
     if (parts.length < 2) return value;
-    const timeParts = parts[1].split(':');
-    const time = `${timeParts[0].padStart(2, '0')}:${timeParts[1]}`;
+    const time = parts[1].slice(0, 5); // "HH:mm"
     if (!isMultiDay) return time;
     const dateParts = parts[0].split('/');
     return `${parseInt(dateParts[1])}/${parseInt(dateParts[2])} ${time}`;

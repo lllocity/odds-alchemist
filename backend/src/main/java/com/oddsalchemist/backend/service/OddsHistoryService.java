@@ -7,8 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,13 +21,6 @@ public class OddsHistoryService {
     private static final Logger logger = LoggerFactory.getLogger(OddsHistoryService.class);
     private static final String ODDS_DATA_RANGE = "OddsData!A:H";
     private static final String ALERTS_RANGE = "Alerts!A:G";
-    /**
-     * Sheetsから読み込む日時文字列のパーサー。
-     * 書き込みは "yyyy/MM/dd HH:mm:ss" 形式だが、過去データは "yyyy/M/d H:mm:ss"（ゼロなし）で
-     * 保存されている場合があるため、単一桁パターン（M/d/H）で両方を受け入れる。
-     */
-    private static final DateTimeFormatter SHEETS_FORMATTER = DateTimeFormatter.ofPattern("yyyy/M/d H:mm:ss");
-
     private final GoogleSheetsService googleSheetsService;
 
     public OddsHistoryService(GoogleSheetsService googleSheetsService) {
@@ -89,13 +80,7 @@ public class OddsHistoryService {
                     .filter(row -> row.size() > 7
                             && url.equals(row.get(1).toString())
                             && horseName.equals(row.get(4).toString()))
-                    .sorted(Comparator.comparing(row -> {
-                        try {
-                            return LocalDateTime.parse(row.get(0).toString(), SHEETS_FORMATTER);
-                        } catch (Exception e) {
-                            return LocalDateTime.MIN;
-                        }
-                    }))
+                    .sorted(Comparator.comparing(row -> row.get(0).toString()))
                     .map(row -> new OddsHistoryItemDto(
                             row.get(0).toString(),
                             parseDoubleSafe(row.get(5).toString()),
@@ -120,13 +105,7 @@ public class OddsHistoryService {
                     .filter(row -> row.size() > 6
                             && url.equals(row.get(1).toString())
                             && horseName.equals(row.get(4).toString()))
-                    .sorted(Comparator.comparing(row -> {
-                        try {
-                            return LocalDateTime.parse(row.get(0).toString(), SHEETS_FORMATTER);
-                        } catch (Exception e) {
-                            return LocalDateTime.MIN;
-                        }
-                    }))
+                    .sorted(Comparator.comparing(row -> row.get(0).toString()))
                     .map(row -> {
                         Double val = parseDoubleSafe(row.get(6).toString());
                         return new AlertHistoryItemDto(

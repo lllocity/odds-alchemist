@@ -31,14 +31,10 @@ const ALERT_TYPE_CONFIG: Record<AlertType, {
   },
 };
 
-/** ISO-8601文字列を "HH:mm:ss" 形式に整形する */
-function formatTime(isoString: string): string {
-  try {
-    const date = new Date(isoString);
-    return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  } catch {
-    return isoString;
-  }
+/** "yyyy/MM/dd HH:mm:ss" 形式の文字列から時刻部分 "HH:mm:ss" を返す */
+function formatTime(detectedAt: string): string {
+  const timePart = detectedAt.split(' ')[1];
+  return timePart ?? detectedAt;
 }
 
 interface AlertListProps {

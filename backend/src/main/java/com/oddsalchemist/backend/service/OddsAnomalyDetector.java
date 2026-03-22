@@ -8,10 +8,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import com.oddsalchemist.backend.util.SheetsDates;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -49,9 +49,6 @@ public class OddsAnomalyDetector {
     /** BigDecimal除算時の小数点以下桁数 */
     private static final int SUPPORT_RATE_SCALE = 10;
 
-    /** 検知時刻のフォーマット（OddsDataの取得日時と統一: "yyyy/MM/dd HH:mm:ss"） */
-    private static final DateTimeFormatter DETECTED_AT_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     /**
      * 前回の単勝オッズを保持するインメモリキャッシュ。
@@ -172,7 +169,7 @@ public class OddsAnomalyDetector {
                         current.horseName(),
                         "支持率急増",
                         increase.doubleValue(),
-                        LocalDateTime.now(clock).format(DETECTED_AT_FORMATTER)));
+                        LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
                 logger.info("【支持率急増検知】馬番={}, 馬名={}, 支持率増加={}, 前回オッズ={}, 現在オッズ={}",
                         current.horseNumber(), current.horseName(), increase, prevOdds, current.winOdds());
             }
@@ -223,7 +220,7 @@ public class OddsAnomalyDetector {
                         data.horseName(),
                         "順位乖離",
                         (double) gap,
-                        LocalDateTime.now(clock).format(DETECTED_AT_FORMATTER)));
+                        LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
                 logger.info("【順位乖離検知】馬番={}, 馬名={}, 単勝順位={}, 複勝順位={}, ギャップ={}",
                         data.horseNumber(), data.horseName(), winRank, placeRank, gap);
             }
@@ -272,7 +269,7 @@ public class OddsAnomalyDetector {
                         current.horseName(),
                         "トレンド逸脱",
                         deviation.doubleValue(),
-                        LocalDateTime.now(clock).format(DETECTED_AT_FORMATTER)));
+                        LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
                 logger.info("【トレンド逸脱検知】馬番={}, 馬名={}, 基準オッズ={}, 現在オッズ={}, 逸脱量={}, 単勝順位={}",
                         current.horseNumber(), current.horseName(), baselineOdds, current.winOdds(), deviation, winRank);
             }

@@ -3,6 +3,7 @@ package com.oddsalchemist.backend.scheduler;
 import com.oddsalchemist.backend.config.ScrapingProperties;
 import com.oddsalchemist.backend.service.OddsSyncService;
 import com.oddsalchemist.backend.service.TargetUrlStore;
+import com.oddsalchemist.backend.util.SheetsDates;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -40,7 +42,6 @@ public class OddsScrapingScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsScrapingScheduler.class);
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter EXEC_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     static final Duration DELAY_30MIN = Duration.ofMinutes(30);
     static final Duration DELAY_15MIN = Duration.ofMinutes(15);
@@ -92,7 +93,7 @@ public class OddsScrapingScheduler {
             LocalDateTime nextScheduled = targetUrlStore.getNextScheduledTime(url)
                     .flatMap(s -> {
                         try {
-                            return Optional.of(LocalDateTime.parse(s, EXEC_TIME_FORMATTER));
+                            return Optional.of(LocalDateTime.parse(s, SheetsDates.FORMATTER));
                         } catch (Exception e) {
                             logger.warn("次回予定時刻のパース失敗: URL={}, value={}", url, s);
                             return Optional.empty();
@@ -102,7 +103,7 @@ public class OddsScrapingScheduler {
 
             if (nextScheduled != null && nextScheduled.isAfter(LocalDateTime.now())) {
                 Instant scheduledInstant = nextScheduled.atZone(ZoneId.systemDefault()).toInstant();
-                logger.info("起動時URL復元: 予定時刻にスケジュール URL={}, 予定={}", url, nextScheduled.format(EXEC_TIME_FORMATTER));
+                logger.info("起動時URL復元: 予定時刻にスケジュール URL={}, 予定={}", url, nextScheduled.format(SheetsDates.FORMATTER));
                 ScheduledFuture<?> task = taskScheduler.schedule(() -> scrapeAndReschedule(url), scheduledInstant);
                 taskMap.put(url, task);
             } else {
@@ -182,11 +183,11 @@ public class OddsScrapingScheduler {
      */
     public void updateAndPersistExecutionTimes(String url) {
         LocalDateTime now = LocalDateTime.now();
-        String lastExecution = now.format(EXEC_TIME_FORMATTER);
+        String lastExecution = now.format(SheetsDates.FORMATTER);
         Duration nextDelay = properties.debugIntervalMinutes() > 0
                 ? Duration.ofMinutes(properties.debugIntervalMinutes())
                 : calculateDelayForUrl(url, now.toLocalTime());
-        String nextScheduled = now.plus(nextDelay).format(EXEC_TIME_FORMATTER);
+        String nextScheduled = now.plus(nextDelay).format(SheetsDates.FORMATTER);
         targetUrlStore.updateExecutionTimes(url, lastExecution, nextScheduled);
         targetUrlStore.persistToSheet();
     }
