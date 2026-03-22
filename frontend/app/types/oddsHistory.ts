@@ -11,3 +11,10 @@ export type HorseOption = {
   horseNumber: number;
   horseName: string;
 };
+
+/** Alertsシートのアラートをグラフプロット用に表す型 */
+export type AlertHistoryItem = {
+  detectedAt: string;
+  alertType: string;
+  value: number;
+};

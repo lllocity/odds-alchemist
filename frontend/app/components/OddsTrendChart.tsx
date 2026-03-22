@@ -5,8 +5,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { OddsHistoryItem, HorseOption } from '@/app/types/oddsHistory';
-import { AnomalyAlert, AlertType } from '@/app/types/oddsAlert';
+import { OddsHistoryItem, HorseOption, AlertHistoryItem } from '@/app/types/oddsHistory';
+import { AlertType } from '@/app/types/oddsAlert';
 
 const ALERT_COLORS: Record<AlertType, string> = {
   '支持率急増': '#f97316',
@@ -111,7 +111,7 @@ export default function OddsTrendChart() {
       const params = new URLSearchParams({ url: selectedUrl, horseName: selectedHorse });
       const [oddsRes, alertsRes] = await Promise.all([
         fetch(`${apiBaseUrl}/api/odds/history?${params}`),
-        fetch(`${apiBaseUrl}/api/odds/alerts`),
+        fetch(`${apiBaseUrl}/api/odds/history/alerts?${params}`),
       ]);
       if (!oddsRes.ok) throw new Error(`オッズデータ取得失敗: ${oddsRes.status}`);
 
@@ -124,21 +124,13 @@ export default function OddsTrendChart() {
       // バックエンドがdetectedAt昇順でソート済みのため、そのままセット
       setChartData(data);
 
-      // アラートマーカーの計算（馬名一致 + グラフ時間範囲内）
+      // Alertsシートから取得済み（URL+馬名でサーバー側フィルタ済み）
       if (alertsRes.ok) {
-        const allAlerts: AnomalyAlert[] = await alertsRes.json();
-        const startMs = parseDataAt(data[0].detectedAt).getTime();
-        const endMs = parseDataAt(data[data.length - 1].detectedAt).getTime();
-
-        const relevant = allAlerts.filter((a) => {
-          if (a.horseName !== selectedHorse) return false;
-          const t = new Date(a.detectedAt).getTime();
-          return t >= startMs - 60_000 && t <= endMs + 60_000;
-        });
+        const alerts: AlertHistoryItem[] = await alertsRes.json();
 
         // アラート時刻に最も近いchartDataのdetectedAtを探してマーカー位置とする
-        const markers: AlertMarker[] = relevant.map((a) => {
-          const alertMs = new Date(a.detectedAt).getTime();
+        const markers: AlertMarker[] = alerts.map((a) => {
+          const alertMs = parseDataAt(a.detectedAt).getTime();
           let nearest = data[0].detectedAt;
           let minDiff = Infinity;
           for (const item of data) {
@@ -148,7 +140,7 @@ export default function OddsTrendChart() {
               nearest = item.detectedAt;
             }
           }
-          return { x: nearest, type: a.alertType, value: a.value };
+          return { x: nearest, type: a.alertType as AlertType, value: a.value };
         });
         setAlertMarkers(markers);
       }

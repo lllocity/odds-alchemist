@@ -1,5 +1,6 @@
 package com.oddsalchemist.backend.service;
 
+import com.oddsalchemist.backend.dto.AlertHistoryItemDto;
 import com.oddsalchemist.backend.dto.HorseDto;
 import com.oddsalchemist.backend.dto.OddsHistoryItemDto;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,13 @@ class OddsHistoryServiceTest {
             List.of("2026/03/19 10:05:00", URL_A, "テストレース", "1", "シンザン",  "3.3", "1.6", "2.1"),
             List.of("2026/03/19 10:00:00", URL_A, "テストレース", "2", "ハクチカラ", "5.0", "2.0", "3.0"),
             List.of("2026/03/19 10:00:00", URL_B, "別レース",    "1", "タケホープ", "2.0", "1.1", "1.5")
+    );
+
+    /** Alerts!A:G の列: 検知日時, URL, レース名, 馬番, 馬名, 検知タイプ, 数値 */
+    private final List<List<Object>> sampleAlertRows = List.of(
+            List.of("2026/03/19 10:03:00", URL_A, "テストレース", "1", "シンザン", "支持率急増", "2.5"),
+            List.of("2026/03/19 10:01:00", URL_A, "テストレース", "1", "シンザン", "順位乖離",  "3.0"),
+            List.of("2026/03/19 10:02:00", URL_B, "別レース",    "1", "タケホープ", "支持率急増", "1.5")
     );
 
     @BeforeEach
@@ -134,5 +142,35 @@ class OddsHistoryServiceTest {
         when(googleSheetsService.readData("OddsData!A:H")).thenThrow(new IOException("API失敗"));
 
         assertThat(service.getHistory(URL_A, "シンザン")).isEmpty();
+    }
+
+    // ===== getAlerts =====
+
+    @Test
+    void getAlerts_指定URLと馬名のアラートが検知日時昇順で返されること() throws Exception {
+        when(googleSheetsService.readData("Alerts!A:G")).thenReturn(sampleAlertRows);
+
+        List<AlertHistoryItemDto> alerts = service.getAlerts(URL_A, "シンザン");
+
+        assertThat(alerts).hasSize(2);
+        assertThat(alerts.get(0).detectedAt()).isEqualTo("2026/03/19 10:01:00");
+        assertThat(alerts.get(0).alertType()).isEqualTo("順位乖離");
+        assertThat(alerts.get(0).value()).isEqualTo(3.0);
+        assertThat(alerts.get(1).detectedAt()).isEqualTo("2026/03/19 10:03:00");
+        assertThat(alerts.get(1).alertType()).isEqualTo("支持率急増");
+    }
+
+    @Test
+    void getAlerts_異なるURLのアラートは含まれないこと() throws Exception {
+        when(googleSheetsService.readData("Alerts!A:G")).thenReturn(sampleAlertRows);
+
+        assertThat(service.getAlerts(URL_B, "シンザン")).isEmpty();
+    }
+
+    @Test
+    void getAlerts_Sheets読み込み失敗時は空リストを返すこと() throws Exception {
+        when(googleSheetsService.readData("Alerts!A:G")).thenThrow(new IOException("API失敗"));
+
+        assertThat(service.getAlerts(URL_A, "シンザン")).isEmpty();
     }
 }

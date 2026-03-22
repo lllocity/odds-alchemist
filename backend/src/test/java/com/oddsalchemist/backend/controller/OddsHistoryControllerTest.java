@@ -1,5 +1,6 @@
 package com.oddsalchemist.backend.controller;
 
+import com.oddsalchemist.backend.dto.AlertHistoryItemDto;
 import com.oddsalchemist.backend.dto.HorseDto;
 import com.oddsalchemist.backend.dto.OddsHistoryItemDto;
 import com.oddsalchemist.backend.service.OddsHistoryService;
@@ -97,6 +98,36 @@ class OddsHistoryControllerTest {
 
         ResponseEntity<List<OddsHistoryItemDto>> response =
                 controller.getHistory("https://example.com/race/A", "シンザン");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEmpty();
+    }
+
+    // ===== getAlerts =====
+
+    @Test
+    void getAlerts_アラートリストが200で返されること() {
+        String url = "https://example.com/race/A";
+        String horseName = "シンザン";
+        List<AlertHistoryItemDto> expected = List.of(
+                new AlertHistoryItemDto("2026/03/19 10:01:00", "順位乖離", 3.0),
+                new AlertHistoryItemDto("2026/03/19 10:03:00", "支持率急増", 2.5)
+        );
+        when(oddsHistoryService.getAlerts(url, horseName)).thenReturn(expected);
+
+        ResponseEntity<List<AlertHistoryItemDto>> response = controller.getAlerts(url, horseName);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).hasSize(2);
+        assertThat(response.getBody().get(0).alertType()).isEqualTo("順位乖離");
+    }
+
+    @Test
+    void getAlerts_データがない場合は空リストで200を返すこと() {
+        when(oddsHistoryService.getAlerts(any(), any())).thenReturn(List.of());
+
+        ResponseEntity<List<AlertHistoryItemDto>> response =
+                controller.getAlerts("https://example.com/race/A", "シンザン");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEmpty();

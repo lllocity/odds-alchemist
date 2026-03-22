@@ -1,5 +1,6 @@
 package com.oddsalchemist.backend.controller;
 
+import com.oddsalchemist.backend.dto.AlertHistoryItemDto;
 import com.oddsalchemist.backend.dto.HorseDto;
 import com.oddsalchemist.backend.dto.OddsHistoryItemDto;
 import com.oddsalchemist.backend.service.OddsHistoryService;
@@ -56,5 +57,19 @@ public class OddsHistoryController {
             @RequestParam String url,
             @RequestParam String horseName) {
         return ResponseEntity.ok(oddsHistoryService.getHistory(url, horseName));
+    }
+
+    /**
+     * 指定URLと馬名のアラート履歴をAlertsシートから検知日時昇順で返します。
+     *
+     * @param url       対象レースのURL
+     * @param horseName 馬名
+     * @return アラート履歴のリスト
+     */
+    @GetMapping("/alerts")
+    public ResponseEntity<List<AlertHistoryItemDto>> getAlerts(
+            @RequestParam String url,
+            @RequestParam String horseName) {
+        return ResponseEntity.ok(oddsHistoryService.getAlerts(url, horseName));
     }
 }

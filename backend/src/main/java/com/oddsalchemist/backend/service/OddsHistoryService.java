@@ -1,5 +1,6 @@
 package com.oddsalchemist.backend.service;
 
+import com.oddsalchemist.backend.dto.AlertHistoryItemDto;
 import com.oddsalchemist.backend.dto.HorseDto;
 import com.oddsalchemist.backend.dto.OddsHistoryItemDto;
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ public class OddsHistoryService {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsHistoryService.class);
     private static final String ODDS_DATA_RANGE = "OddsData!A:H";
+    private static final String ALERTS_RANGE = "Alerts!A:G";
     /**
      * Sheetsから読み込む日時文字列のパーサー。
      * 書き込みは "yyyy/MM/dd HH:mm:ss" 形式だが、過去データは "yyyy/M/d H:mm:ss"（ゼロなし）で
@@ -104,6 +106,38 @@ public class OddsHistoryService {
         } catch (Exception e) {
             logger.warn("OddsDataから時系列データの取得に失敗しました: url={}, horse={}, error={}",
                     url, horseName, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 指定URLと馬名に一致するアラート履歴を検知日時昇順で返します。
+     */
+    public List<AlertHistoryItemDto> getAlerts(String url, String horseName) {
+        try {
+            List<List<Object>> rows = googleSheetsService.readData(ALERTS_RANGE);
+            return rows.stream()
+                    .filter(row -> row.size() > 6
+                            && url.equals(row.get(1).toString())
+                            && horseName.equals(row.get(4).toString()))
+                    .sorted(Comparator.comparing(row -> {
+                        try {
+                            return LocalDateTime.parse(row.get(0).toString(), SHEETS_FORMATTER);
+                        } catch (Exception e) {
+                            return LocalDateTime.MIN;
+                        }
+                    }))
+                    .map(row -> {
+                        Double val = parseDoubleSafe(row.get(6).toString());
+                        return new AlertHistoryItemDto(
+                                row.get(0).toString(),
+                                row.get(5).toString(),
+                                val != null ? val : 0.0
+                        );
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            logger.warn("Alertsから履歴の取得に失敗しました: url={}, horse={}, error={}", url, horseName, e.getMessage());
             return List.of();
         }
     }
