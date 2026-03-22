@@ -49,9 +49,9 @@ public class OddsAnomalyDetector {
     /** BigDecimal除算時の小数点以下桁数 */
     private static final int SUPPORT_RATE_SCALE = 10;
 
-    /** 検知時刻のフォーマット（ISO-8601形式、秒まで） */
+    /** 検知時刻のフォーマット（OddsDataの取得日時と統一: "yyyy/MM/dd HH:mm:ss"） */
     private static final DateTimeFormatter DETECTED_AT_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     /**
      * 前回の単勝オッズを保持するインメモリキャッシュ。

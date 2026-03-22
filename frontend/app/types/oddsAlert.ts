@@ -18,6 +18,6 @@ export interface AnomalyAlert {
   alertType: AlertType;
   /** 該当数値（支持率急増: 増加量、順位乖離: ギャップ値、トレンド逸脱: 逸脱量） */
   value: number;
-  /** 検知時刻（ISO-8601形式: "2026-03-02T15:30:00"） */
+  /** 検知時刻（形式: "yyyy/MM/dd HH:mm:ss"） */
   detectedAt: string;
 }
