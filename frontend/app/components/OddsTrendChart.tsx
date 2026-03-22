@@ -157,10 +157,21 @@ export default function OddsTrendChart() {
     }
   };
 
-  /** X軸ラベル: "yyyy/MM/dd HH:mm:ss" → "HH:mm" */
+  /** データが複数日にまたがるか */
+  const isMultiDay = chartData
+    ? new Set(chartData.map((item) => item.detectedAt.split(' ')[0])).size > 1
+    : false;
+
+  /**
+   * X軸ラベル: "yyyy/MM/dd HH:mm:ss" → 単日: "HH:mm" / 複数日: "M/d HH:mm"
+   */
   const formatTime = (value: string) => {
     const parts = value.split(' ');
-    return parts.length > 1 ? parts[1].slice(0, 5) : value;
+    if (parts.length < 2) return value;
+    const time = parts[1].slice(0, 5);
+    if (!isMultiDay) return time;
+    const dateParts = parts[0].split('/');
+    return `${parseInt(dateParts[1])}/${parseInt(dateParts[2])} ${time}`;
   };
 
   const canShowChart = selectedUrl && selectedHorse && !isLoadingHorses;
@@ -248,6 +259,9 @@ export default function OddsTrendChart() {
                 dataKey="detectedAt"
                 tickFormatter={formatTime}
                 tick={{ fontSize: 11, fill: '#6b7280' }}
+                angle={isMultiDay ? -35 : 0}
+                textAnchor={isMultiDay ? 'end' : 'middle'}
+                height={isMultiDay ? 48 : 30}
               />
               <YAxis
                 tick={{ fontSize: 11, fill: '#6b7280' }}
