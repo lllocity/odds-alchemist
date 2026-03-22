@@ -22,7 +22,10 @@ const ALERT_SHORT: Record<AlertType, string> = {
 
 type AlertMarker = { x: string; type: AlertType; value: number };
 
-/** "yyyy/M/d H:mm:ss" → Date（Sheetsがゼロなし形式で返すため個別パース） */
+/**
+ * Sheets日時文字列 ("yyyy/MM/dd HH:mm:ss" または過去データの "yyyy/M/d H:mm:ss") を Date に変換。
+ * ISO文字列に変換すると単一桁時が無効形式になるため、フィールドを個別にパースする。
+ */
 function parseDataAt(s: string): Date {
   const [datePart, timePart] = s.split(' ');
   const [y, m, d] = datePart.split('/').map(Number);
@@ -118,17 +121,14 @@ export default function OddsTrendChart() {
         return;
       }
 
-      // 時系列順にソート
-      const sorted = [...data].sort(
-        (a, b) => parseDataAt(a.detectedAt).getTime() - parseDataAt(b.detectedAt).getTime()
-      );
-      setChartData(sorted);
+      // バックエンドがdetectedAt昇順でソート済みのため、そのままセット
+      setChartData(data);
 
       // アラートマーカーの計算（馬名一致 + グラフ時間範囲内）
       if (alertsRes.ok) {
         const allAlerts: AnomalyAlert[] = await alertsRes.json();
-        const startMs = parseDataAt(sorted[0].detectedAt).getTime();
-        const endMs = parseDataAt(sorted[sorted.length - 1].detectedAt).getTime();
+        const startMs = parseDataAt(data[0].detectedAt).getTime();
+        const endMs = parseDataAt(data[data.length - 1].detectedAt).getTime();
 
         const relevant = allAlerts.filter((a) => {
           if (a.horseName !== selectedHorse) return false;
@@ -136,12 +136,12 @@ export default function OddsTrendChart() {
           return t >= startMs - 60_000 && t <= endMs + 60_000;
         });
 
+        // アラート時刻に最も近いchartDataのdetectedAtを探してマーカー位置とする
         const markers: AlertMarker[] = relevant.map((a) => {
-          // アラート時刻に最も近いchartDataのdetectedAtを探す
           const alertMs = new Date(a.detectedAt).getTime();
-          let nearest = sorted[0].detectedAt;
+          let nearest = data[0].detectedAt;
           let minDiff = Infinity;
-          for (const item of sorted) {
+          for (const item of data) {
             const diff = Math.abs(parseDataAt(item.detectedAt).getTime() - alertMs);
             if (diff < minDiff) {
               minDiff = diff;

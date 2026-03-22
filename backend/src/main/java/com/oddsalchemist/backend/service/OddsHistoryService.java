@@ -21,7 +21,11 @@ public class OddsHistoryService {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsHistoryService.class);
     private static final String ODDS_DATA_RANGE = "OddsData!A:H";
-    /** Sheetsが返す日時フォーマット（USER_ENTEREDによりゼロなし形式になる: "yyyy/M/d H:mm:ss"） */
+    /**
+     * Sheetsから読み込む日時文字列のパーサー。
+     * 書き込みは "yyyy/MM/dd HH:mm:ss" 形式だが、過去データは "yyyy/M/d H:mm:ss"（ゼロなし）で
+     * 保存されている場合があるため、単一桁パターン（M/d/H）で両方を受け入れる。
+     */
     private static final DateTimeFormatter SHEETS_FORMATTER = DateTimeFormatter.ofPattern("yyyy/M/d H:mm:ss");
 
     private final GoogleSheetsService googleSheetsService;
