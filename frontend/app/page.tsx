@@ -290,9 +290,23 @@ export default function Home() {
 
           </div>
 
-          {/* 右カラム: 検知アラート */}
-          <div className="bg-white rounded-xl shadow-md p-6 sticky top-6">
-            <AlertList alerts={alerts} lastUpdated={lastUpdated} />
+          {/* 右カラム: 買いの掟 + 検知アラート */}
+          <div className="space-y-4 sticky top-6">
+
+            {/* 買いの掟 */}
+            <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-4">
+              <p className="text-xs font-bold text-amber-800 mb-2 tracking-wide">⚠ 買いの掟</p>
+              <ul className="space-y-1">
+                <li className="text-xs text-amber-900">
+                  ・オッズの動きだけ見て買うな。アラートが鳴って初めて動け。
+                </li>
+              </ul>
+            </div>
+
+            {/* 検知アラート */}
+            <div className="bg-white rounded-xl shadow-md p-6">
+              <AlertList alerts={alerts} lastUpdated={lastUpdated} />
+            </div>
           </div>
 
         </div>
