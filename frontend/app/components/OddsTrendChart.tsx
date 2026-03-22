@@ -233,98 +233,125 @@ export default function OddsTrendChart() {
 
       {/* グラフ本体 */}
       {chartData && chartData.length > 0 && (
-        <div className="mt-2">
-          <p className="text-xs text-gray-500 mb-2 text-center">
+        <div className="mt-2 space-y-6">
+          <p className="text-xs text-gray-500 text-center">
             {selectedHorse}（{chartData.length}件）
           </p>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData} margin={{ top: 16, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="detectedAt"
-                tickFormatter={formatTime}
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                angle={isMultiDay ? -35 : 0}
-                textAnchor={isMultiDay ? 'end' : 'middle'}
-                height={isMultiDay ? 48 : 30}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: '#6b7280' }}
-                width={40}
-              />
-              <Tooltip
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={(value: any) =>
-                  typeof value === 'number' ? value.toFixed(1) : '-'
-                }
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                labelFormatter={(label: any) => `取得日時: ${label}`}
-                contentStyle={{ fontSize: 12 }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line
-                type="monotone"
-                dataKey="winOdds"
-                name="単勝"
-                stroke="#2563eb"
-                strokeWidth={2}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                dot={(props: any) => {
-                  const { cx, cy, payload } = props;
-                  const marker = alertMarkers.find(m => m.x === payload.detectedAt);
-                  if (!marker || cy == null) return <g key={props.key} />;
-                  return (
-                    <circle
-                      key={props.key}
-                      cx={cx}
-                      cy={cy}
-                      r={5}
-                      fill={ALERT_COLORS[marker.type]}
-                      stroke="white"
-                      strokeWidth={1.5}
-                    />
-                  );
-                }}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="placeOddsMin"
-                name="複勝下限"
-                stroke="#16a34a"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="placeOddsMax"
-                name="複勝上限"
-                stroke="#16a34a"
-                strokeWidth={1.5}
-                strokeDasharray="5 5"
-                dot={false}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
 
-          {/* アラート凡例 */}
-          {alertMarkers.length > 0 && (
-            <div className="flex flex-wrap gap-3 justify-center mt-2">
-              {(Object.keys(ALERT_COLORS) as AlertType[])
-                .filter((type) => alertMarkers.some((m) => m.type === type))
-                .map((type) => (
-                  <span key={type} className="flex items-center gap-1.5 text-xs text-gray-600">
-                    <span
-                      className="inline-block w-3 h-3 rounded-full border border-white"
-                      style={{ backgroundColor: ALERT_COLORS[type] }}
-                    />
-                    {type}
-                  </span>
-                ))}
-            </div>
-          )}
+          {/* 単勝グラフ */}
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1 text-center">単勝オッズ</p>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="detectedAt"
+                  tickFormatter={formatTime}
+                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  angle={isMultiDay ? -35 : 0}
+                  textAnchor={isMultiDay ? 'end' : 'middle'}
+                  height={isMultiDay ? 48 : 30}
+                />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} width={40} />
+                <Tooltip
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: any) => typeof value === 'number' ? value.toFixed(1) : '-'}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  labelFormatter={(label: any) => `取得日時: ${label}`}
+                  contentStyle={{ fontSize: 12 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line
+                  type="monotone"
+                  dataKey="winOdds"
+                  name="単勝"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    const marker = alertMarkers.find(m => m.x === payload.detectedAt);
+                    if (!marker || cy == null) return <g key={props.key} />;
+                    return (
+                      <circle
+                        key={props.key}
+                        cx={cx}
+                        cy={cy}
+                        r={5}
+                        fill={ALERT_COLORS[marker.type]}
+                        stroke="white"
+                        strokeWidth={1.5}
+                      />
+                    );
+                  }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+
+            {/* アラート凡例 */}
+            {alertMarkers.length > 0 && (
+              <div className="flex flex-wrap gap-3 justify-center mt-1">
+                {(Object.keys(ALERT_COLORS) as AlertType[])
+                  .filter((type) => alertMarkers.some((m) => m.type === type))
+                  .map((type) => (
+                    <span key={type} className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <span
+                        className="inline-block w-3 h-3 rounded-full border border-white"
+                        style={{ backgroundColor: ALERT_COLORS[type] }}
+                      />
+                      {type}
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* 複勝グラフ */}
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1 text-center">複勝オッズ</p>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="detectedAt"
+                  tickFormatter={formatTime}
+                  tick={{ fontSize: 11, fill: '#6b7280' }}
+                  angle={isMultiDay ? -35 : 0}
+                  textAnchor={isMultiDay ? 'end' : 'middle'}
+                  height={isMultiDay ? 48 : 30}
+                />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} width={40} />
+                <Tooltip
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: any) => typeof value === 'number' ? value.toFixed(1) : '-'}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  labelFormatter={(label: any) => `取得日時: ${label}`}
+                  contentStyle={{ fontSize: 12 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line
+                  type="monotone"
+                  dataKey="placeOddsMin"
+                  name="複勝下限"
+                  stroke="#16a34a"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="placeOddsMax"
+                  name="複勝上限"
+                  stroke="#059669"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 5"
+                  dot={false}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>
