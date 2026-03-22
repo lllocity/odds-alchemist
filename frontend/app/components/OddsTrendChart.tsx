@@ -22,9 +22,12 @@ const ALERT_SHORT: Record<AlertType, string> = {
 
 type AlertMarker = { x: string; type: AlertType; value: number };
 
-/** "yyyy/MM/dd HH:mm:ss" → Date */
+/** "yyyy/M/d H:mm:ss" → Date（Sheetsがゼロなし形式で返すため個別パース） */
 function parseDataAt(s: string): Date {
-  return new Date(s.replace(/\//g, '-').replace(' ', 'T'));
+  const [datePart, timePart] = s.split(' ');
+  const [y, m, d] = datePart.split('/').map(Number);
+  const [h, min, sec] = timePart.split(':').map(Number);
+  return new Date(y, m - 1, d, h, min, sec);
 }
 
 export default function OddsTrendChart() {
@@ -163,12 +166,14 @@ export default function OddsTrendChart() {
     : false;
 
   /**
-   * X軸ラベル: "yyyy/MM/dd HH:mm:ss" → 単日: "HH:mm" / 複数日: "M/d HH:mm"
+   * X軸ラベル: "yyyy/M/d H:mm:ss" → 単日: "HH:mm" / 複数日: "M/d HH:mm"
+   * Sheetsがゼロなし形式で返すため、時を padStart で補正する
    */
   const formatTime = (value: string) => {
     const parts = value.split(' ');
     if (parts.length < 2) return value;
-    const time = parts[1].slice(0, 5);
+    const timeParts = parts[1].split(':');
+    const time = `${timeParts[0].padStart(2, '0')}:${timeParts[1]}`;
     if (!isMultiDay) return time;
     const dateParts = parts[0].split('/');
     return `${parseInt(dateParts[1])}/${parseInt(dateParts[2])} ${time}`;

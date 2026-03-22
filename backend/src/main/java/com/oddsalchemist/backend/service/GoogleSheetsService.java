@@ -16,7 +16,8 @@ import java.util.List;
 public class GoogleSheetsService {
 
     private static final Logger logger = LoggerFactory.getLogger(GoogleSheetsService.class);
-    private static final String VALUE_INPUT_OPTION = "USER_ENTERED";
+    /** RAW: 文字列をそのまま保存（USER_ENTEREDだとSheetsが日時を独自フォーマットに変換してしまう） */
+    private static final String VALUE_INPUT_OPTION = "RAW";
     private final Sheets sheetsService;
     private final String spreadsheetId;
 
