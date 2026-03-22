@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine,
+  ResponsiveContainer,
 } from 'recharts';
 import { OddsHistoryItem, HorseOption, AlertHistoryItem } from '@/app/types/oddsHistory';
 import { AlertType } from '@/app/types/oddsAlert';
@@ -14,11 +14,6 @@ const ALERT_COLORS: Record<AlertType, string> = {
   'トレンド逸脱': '#dc2626',
 };
 
-const ALERT_SHORT: Record<AlertType, string> = {
-  '支持率急増': '急増',
-  '順位乖離': '乖離',
-  'トレンド逸脱': '逸脱',
-};
 
 type AlertMarker = { x: string; type: AlertType; value: number };
 
@@ -274,27 +269,29 @@ export default function OddsTrendChart() {
                 contentStyle={{ fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              {alertMarkers.map((marker, i) => (
-                <ReferenceLine
-                  key={i}
-                  x={marker.x}
-                  stroke={ALERT_COLORS[marker.type]}
-                  strokeDasharray="4 2"
-                  label={{
-                    value: ALERT_SHORT[marker.type],
-                    fill: ALERT_COLORS[marker.type],
-                    fontSize: 10,
-                    position: 'insideTopRight',
-                  }}
-                />
-              ))}
               <Line
                 type="monotone"
                 dataKey="winOdds"
                 name="単勝"
                 stroke="#2563eb"
                 strokeWidth={2}
-                dot={false}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                dot={(props: any) => {
+                  const { cx, cy, payload } = props;
+                  const marker = alertMarkers.find(m => m.x === payload.detectedAt);
+                  if (!marker || cy == null) return <g key={props.key} />;
+                  return (
+                    <circle
+                      key={props.key}
+                      cx={cx}
+                      cy={cy}
+                      r={5}
+                      fill={ALERT_COLORS[marker.type]}
+                      stroke="white"
+                      strokeWidth={1.5}
+                    />
+                  );
+                }}
                 connectNulls
               />
               <Line
@@ -325,10 +322,10 @@ export default function OddsTrendChart() {
               {(Object.keys(ALERT_COLORS) as AlertType[])
                 .filter((type) => alertMarkers.some((m) => m.type === type))
                 .map((type) => (
-                  <span key={type} className="flex items-center gap-1 text-xs text-gray-600">
+                  <span key={type} className="flex items-center gap-1.5 text-xs text-gray-600">
                     <span
-                      className="inline-block w-4 border-t-2"
-                      style={{ borderColor: ALERT_COLORS[type], borderStyle: 'dashed' }}
+                      className="inline-block w-3 h-3 rounded-full border border-white"
+                      style={{ backgroundColor: ALERT_COLORS[type] }}
                     />
                     {type}
                   </span>
