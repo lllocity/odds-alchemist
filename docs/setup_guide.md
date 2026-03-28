@@ -96,14 +96,12 @@ SPRING_SLACK_ENABLED=true
 ## ⑦ 起動
 
 ```bash
-./start.sh          # 通常起動（バックグラウンド）
-./start.sh --build  # 初回 / コード変更時
+docker compose up --build   # 初回 / コード変更時
+docker compose up -d        # 2回目以降（バックグラウンド）
 ```
 
 - フロントエンド: http://localhost:3000
 - バックエンド API: http://localhost:8080
-
-`start.sh` はバックグラウンドで Docker Compose を起動する。起動成功時は `✅ 起動成功` と表示される。
 
 ---
 
@@ -115,8 +113,8 @@ docker compose logs -f           # 全サービス
 docker compose logs -f backend   # バックエンドのみ
 docker compose logs -f frontend  # フロントエンドのみ
 
-# 停止（コンテナ削除 + スリープ抑制解除）
-./stop.sh
+# 停止
+docker compose down
 ```
 
 ---
