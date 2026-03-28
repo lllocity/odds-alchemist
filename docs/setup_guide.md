@@ -103,7 +103,7 @@ SPRING_SLACK_ENABLED=true
 - フロントエンド: http://localhost:3000
 - バックエンド API: http://localhost:8080
 
-`start.sh` はバックグラウンドで Docker Compose を起動し、`caffeinate -i` で Mac のスリープを抑制する。起動成功時は `✅ 起動成功` と表示される。
+`start.sh` はバックグラウンドで Docker Compose を起動する。起動成功時は `✅ 起動成功` と表示される。
 
 ---
 
