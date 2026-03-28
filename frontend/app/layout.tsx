@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "配当の錬金術師",
   description: "JRA オッズ異常検知システム",
+  icons: { icon: "/icon.png" },
 };
 
 export default function RootLayout({

@@ -156,14 +156,16 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 p-6 pt-12">
-      <div className="max-w-6xl mx-auto">
+    <>
+      {/* ヘッダーバー */}
+      <header className="w-full bg-[#0d1b2e] px-8 py-3 flex items-center gap-4 shadow-lg">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="" className="h-11 w-auto" />
+        <h1 className="text-lg font-semibold tracking-widest text-slate-200">配当の錬金術師</h1>
+      </header>
 
-        <div className="flex flex-col items-center mb-6 gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="配当の錬金術師" className="h-20 w-auto" />
-          <h1 className="text-2xl font-bold text-gray-800">配当の錬金術師</h1>
-        </div>
+      <main className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-6xl mx-auto">
 
         <div className="grid grid-cols-2 gap-6 items-start">
 
@@ -314,5 +316,6 @@ export default function Home() {
         </div>
       </div>
     </main>
+    </>
   );
 }
