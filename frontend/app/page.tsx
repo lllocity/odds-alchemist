@@ -159,9 +159,11 @@ export default function Home() {
     <main className="min-h-screen bg-gray-50 p-6 pt-12">
       <div className="max-w-6xl mx-auto">
 
-        <h1 className="text-2xl font-bold text-gray-800 text-center mb-6">
-          Odds Alchemist
-        </h1>
+        <div className="flex flex-col items-center mb-6 gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="配当の錬金術師" className="h-20 w-auto" />
+          <h1 className="text-2xl font-bold text-gray-800">配当の錬金術師</h1>
+        </div>
 
         <div className="grid grid-cols-2 gap-6 items-start">
 

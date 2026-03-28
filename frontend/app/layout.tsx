@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Odds Alchemist",
+  title: "配当の錬金術師",
   description: "JRA オッズ異常検知システム",
 };
 
