@@ -10,7 +10,7 @@ import { TargetUrlInfo } from '@/app/types/targetUrl';
 const POLLING_INTERVAL_MS = 10_000;
 
 export default function Home() {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8081';
 
   // ===== 即時取得フォームの状態 =====
   const [url, setUrl] = useState('');

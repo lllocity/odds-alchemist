@@ -100,7 +100,7 @@ docker compose up --build -d
 ```
 
 - フロントエンド: http://localhost:3000
-- バックエンド API: http://localhost:8080
+- バックエンド API: http://localhost:8081
 
 ---
 
@@ -120,7 +120,7 @@ ipconfig getifaddr en0
 ### 2. `.env` に API ベース URL を設定する
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=http://192.168.1.10:8080
+NEXT_PUBLIC_API_BASE_URL=http://192.168.1.10:8081
 ```
 
 > `192.168.1.10` は実際の iMac の IP に置き換えること

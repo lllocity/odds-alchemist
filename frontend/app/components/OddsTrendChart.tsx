@@ -26,7 +26,7 @@ function parseDataAt(s: string): Date {
 }
 
 export default function OddsTrendChart() {
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8081';
 
   const [urls, setUrls] = useState<string[]>([]);
   const [selectedUrl, setSelectedUrl] = useState('');
