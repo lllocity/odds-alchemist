@@ -88,8 +88,8 @@ GCP_KEY_PATH=/Users/yourname/secrets/odds-alchemist-key.json
 GOOGLE_SHEETS_SPREADSHEET_ID=your-spreadsheet-id
 
 # ⑤ でコピーした Slack Webhook URL
-SPRING_SLACK_WEBHOOK__URL=https://hooks.slack.com/services/xxx/yyy/zzz
-SPRING_SLACK_ENABLED=true
+SLACK_WEBHOOK__URL=https://hooks.slack.com/services/xxx/yyy/zzz
+SLACK_ENABLED=true
 ```
 
 > `.env` は `.gitignore` に含まれているため、git にコミットされない
@@ -164,4 +164,4 @@ docker compose down
 |------|-------------|--------|
 | `credentials.json` | `backend/src/main/resources/credentials.json` に配置 | `.env` の `GCP_KEY_PATH` にファイルパスを記載してマウント |
 | スプレッドシート ID | `application-secret.yaml` の `google.sheets.spreadsheet-id` | `.env` の `GOOGLE_SHEETS_SPREADSHEET_ID` |
-| Slack Webhook URL | `application-secret.yaml` の `slack.webhook-url` | `.env` の `SPRING_SLACK_WEBHOOK__URL` |
+| Slack Webhook URL | `application-secret.yaml` の `slack.webhook-url` | `.env` の `SLACK_WEBHOOK__URL` |
