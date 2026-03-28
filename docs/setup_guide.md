@@ -84,6 +84,9 @@ cp .env.example .env
 # ② で保存した JSON キーの絶対パス
 GCP_KEY_PATH=/Users/yourname/secrets/odds-alchemist-key.json
 
+# ③ で確認したスプレッドシート ID
+GOOGLE_SHEETS_SPREADSHEET_ID=your-spreadsheet-id
+
 # ⑤ でコピーした Slack Webhook URL
 SPRING_SLACK_WEBHOOK__URL=https://hooks.slack.com/services/xxx/yyy/zzz
 SPRING_SLACK_ENABLED=true
@@ -160,5 +163,5 @@ docker compose down
 | 情報 | ローカル開発 | Docker |
 |------|-------------|--------|
 | `credentials.json` | `backend/src/main/resources/credentials.json` に配置 | `.env` の `GCP_KEY_PATH` にファイルパスを記載してマウント |
-| スプレッドシート ID | `application-secret.yaml` の `google.sheets.spreadsheet-id` | `.env` の `SPRING_ODDS_SCRAPING_SPREADSHEET__ID`（任意） |
+| スプレッドシート ID | `application-secret.yaml` の `google.sheets.spreadsheet-id` | `.env` の `GOOGLE_SHEETS_SPREADSHEET_ID` |
 | Slack Webhook URL | `application-secret.yaml` の `slack.webhook-url` | `.env` の `SPRING_SLACK_WEBHOOK__URL` |

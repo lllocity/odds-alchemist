@@ -7,6 +7,7 @@ services:
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-key.json
       TZ: Asia/Tokyo
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID}
     volumes:
       # Google 認証 JSON のマウント（イメージに含めない）
       - ${GCP_KEY_PATH}:/app/secrets/gcp-key.json:ro
