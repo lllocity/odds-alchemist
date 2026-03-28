@@ -20,7 +20,7 @@ import static com.oddsalchemist.backend.service.TargetUrlStore.TargetUrlInfo;
  */
 @RestController
 @RequestMapping("/api/odds")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(originPatterns = {"http://localhost:*", "http://192.168.*:*"})
 public class OddsTargetsController {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsTargetsController.class);

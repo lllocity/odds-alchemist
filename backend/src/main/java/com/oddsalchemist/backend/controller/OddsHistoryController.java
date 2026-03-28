@@ -15,7 +15,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/odds/history")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(originPatterns = {"http://localhost:*", "http://192.168.*:*"})
 public class OddsHistoryController {
 
     private final OddsHistoryService oddsHistoryService;

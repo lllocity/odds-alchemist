@@ -11,7 +11,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/odds")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(originPatterns = {"http://localhost:*", "http://192.168.*:*"})
 public class OddsController {
 
     private static final Logger logger = LoggerFactory.getLogger(OddsController.class);

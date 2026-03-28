@@ -104,6 +104,43 @@ docker compose up --build -d
 
 ---
 
+## ⑦-B LAN 越しアクセス（別端末のブラウザから操作する場合）
+
+同じ WiFi ネットワーク上の別端末（例: MacBook のブラウザ）から iMac 上の Docker にアクセスしたい場合は、以下の設定が必要。
+
+### 1. iMac の IP アドレスを確認する
+
+```bash
+ipconfig getifaddr en0
+# 例: 192.168.1.10
+```
+
+または「システム設定 → Wi-Fi → 詳細 → TCP/IP」で確認。
+
+### 2. `.env` に API ベース URL を設定する
+
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=http://192.168.1.10:8080
+```
+
+> `192.168.1.10` は実際の iMac の IP に置き換えること
+
+### 3. 再ビルドして起動する
+
+```bash
+docker compose up --build -d
+```
+
+`NEXT_PUBLIC_API_BASE_URL` は Next.js のビルド時に JS へ焼き込まれるため、変更後は必ず `--build` で再ビルドが必要。
+
+### 4. MacBook から接続する
+
+MacBook のブラウザで `http://192.168.1.10:3000` にアクセスする。
+
+> **補足**: CORS は `192.168.*.*` の全アドレスを許可済み。IP レンジが `10.x.x.x` や `172.16.x.x` などの場合はコード内の `originPatterns` への追加が必要。
+
+---
+
 ## ⑧ 日常的な操作
 
 ```bash
