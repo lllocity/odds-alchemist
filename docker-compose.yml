@@ -8,6 +8,8 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-key.json
       TZ: Asia/Tokyo
       GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      SLACK_ENABLED: ${SLACK_ENABLED:-true}
     volumes:
       # Google 認証 JSON のマウント（イメージに含めない）
       - ${GCP_KEY_PATH}:/app/secrets/gcp-key.json:ro
