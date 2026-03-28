@@ -96,8 +96,7 @@ SPRING_SLACK_ENABLED=true
 ## ⑦ 起動
 
 ```bash
-docker compose up --build   # 初回 / コード変更時
-docker compose up -d        # 2回目以降（バックグラウンド）
+docker compose up --build -d
 ```
 
 - フロントエンド: http://localhost:3000
