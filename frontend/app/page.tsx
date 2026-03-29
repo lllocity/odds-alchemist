@@ -304,6 +304,15 @@ export default function Home() {
                 <li className="text-xs text-amber-900">
                   ・オッズの動きだけ見て買うな。アラートが鳴って初めて動け。
                 </li>
+                <li className="text-xs text-amber-900">
+                  ・人気があり、かつ単勝オッズが緩やかに下がり続けている馬は軸候補。資金が継続して入っている証拠。
+                </li>
+                <li className="text-xs text-amber-900">
+                  ・複勝オッズだけが緩やかに下がっている馬は対抗候補。「飛ぶよりは来る」と見られている。
+                </li>
+                <li className="text-xs text-amber-900">
+                  ・単勝・複勝がともに緩やかに上がっている馬は切り候補。人気離れが進んでいるサイン。
+                </li>
               </ul>
             </div>
 
