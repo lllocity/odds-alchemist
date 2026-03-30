@@ -27,6 +27,10 @@ export default function Home() {
   const [isRegisteringUrl, setIsRegisteringUrl] = useState(false);
   const [urlActionStatus, setUrlActionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // ===== データ管理（シートクリア）の状態 =====
+  const [isClearingSheet, setIsClearingSheet] = useState(false);
+  const [clearStatus, setClearStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   /** アラート一覧をバックエンドから取得する */
   const fetchAlerts = useCallback(async () => {
     try {
@@ -130,6 +134,26 @@ export default function Home() {
       setUrlActionStatus({ type: 'error', message: msg });
     } finally {
       setIsRegisteringUrl(false);
+    }
+  };
+
+  /** シートのデータ行をクリアする（ヘッダー行は保持） */
+  const handleClearSheet = async (sheet: 'OddsData' | 'Alerts') => {
+    const label = sheet === 'OddsData' ? 'オッズデータ' : 'アラート履歴';
+    if (!window.confirm(`${label}（ヘッダー行を除く全データ）を削除します。\nこの操作は取り消せません。続行しますか？`)) return;
+
+    setIsClearingSheet(true);
+    setClearStatus(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/odds/sheets?sheet=${sheet}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setClearStatus({ type: 'success', message: data.message });
+      if (sheet === 'Alerts') fetchAlerts();
+    } catch (e) {
+      setClearStatus({ type: 'error', message: e instanceof Error ? e.message : 'クリアに失敗しました' });
+    } finally {
+      setIsClearingSheet(false);
     }
   };
 
@@ -282,6 +306,42 @@ export default function Home() {
                         : 'bg-blue-50 text-blue-800'
                   }`}>
                     {status.message}
+                  </div>
+                )}
+              </div>
+            </details>
+
+            {/* データ管理パネル */}
+            <details className="bg-white rounded-xl shadow-md">
+              <summary className="px-6 py-4 cursor-pointer text-sm font-medium text-gray-500 select-none list-none flex items-center gap-1">
+                <span className="text-gray-400">▶</span>
+                データ管理
+              </summary>
+              <div className="px-6 pb-6 pt-2 space-y-3">
+                <p className="text-xs text-gray-500">ヘッダー行を除く全データを削除します。この操作は取り消せません。</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleClearSheet('OddsData')}
+                    disabled={isClearingSheet}
+                    className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
+                      ${isClearingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                  >
+                    オッズデータをクリア
+                  </button>
+                  <button
+                    onClick={() => handleClearSheet('Alerts')}
+                    disabled={isClearingSheet}
+                    className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
+                      ${isClearingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                  >
+                    アラート履歴をクリア
+                  </button>
+                </div>
+                {clearStatus && (
+                  <div className={`p-2 rounded text-xs ${
+                    clearStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
+                  }`}>
+                    {clearStatus.message}
                   </div>
                 )}
               </div>
