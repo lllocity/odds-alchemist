@@ -108,26 +108,26 @@ class OddsScrapingSchedulerTest {
     void calculateDelayForUrl_発走60分超前かつ12時以降は15分を返すこと() {
         OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
-        // 発走15:00, 現在13:00（残り120分）→ 15分
+        // 発走15:00, 現在13:00（残り120分）→ 5分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
                 .thenReturn(Optional.of(LocalTime.of(15, 0)));
 
         Duration delay = scheduler.calculateDelayForUrl("https://example.com/race/1", LocalTime.of(13, 0));
 
-        assertThat(delay).isEqualTo(OddsScrapingScheduler.DELAY_15MIN);
+        assertThat(delay).isEqualTo(OddsScrapingScheduler.DELAY_5MIN);
     }
 
     @Test
-    void calculateDelayForUrl_発走60分前は5分を返すこと() {
+    void calculateDelayForUrl_発走60分前は1分を返すこと() {
         OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
 
-        // 発走15:00, 現在14:00（残り60分）→ 5分
+        // 発走15:00, 現在14:00（残り60分）→ 1分
         when(oddsSyncService.getCachedStartTime("https://example.com/race/1"))
                 .thenReturn(Optional.of(LocalTime.of(15, 0)));
 
         Duration delay = scheduler.calculateDelayForUrl("https://example.com/race/1", LocalTime.of(14, 0));
 
-        assertThat(delay).isEqualTo(OddsScrapingScheduler.DELAY_5MIN);
+        assertThat(delay).isEqualTo(OddsScrapingScheduler.DELAY_1MIN);
     }
 
     @Test

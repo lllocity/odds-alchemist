@@ -32,9 +32,8 @@ import java.util.concurrent.ScheduledFuture;
  * URLごとに独立したスケジュールを持ち、各レースの発走時刻に応じて実行間隔を動的に切り替える:
  * <ul>
  *   <li>朝〜12:00 または発走時刻不明: 30分間隔</li>
- *   <li>12:00〜発走60分超前: 15分間隔</li>
- *   <li>発走60分前〜10分前: 5分間隔（コアタイム）</li>
- *   <li>発走10分前〜直前: 1分間隔</li>
+ *   <li>12:00〜発走60分超前: 5分間隔</li>
+ *   <li>発走60分前〜直前: 1分間隔</li>
  * </ul>
  */
 @Component
@@ -44,7 +43,6 @@ public class OddsScrapingScheduler {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     static final Duration DELAY_30MIN = Duration.ofMinutes(30);
-    static final Duration DELAY_15MIN = Duration.ofMinutes(15);
     static final Duration DELAY_5MIN  = Duration.ofMinutes(5);
     static final Duration DELAY_1MIN  = Duration.ofMinutes(1);
 
@@ -254,12 +252,9 @@ public class OddsScrapingScheduler {
             return DELAY_30MIN;
         } else if (minutesUntilStart > 60) {
             // 12:00〜60分超前（プール金・中）
-            return DELAY_15MIN;
-        } else if (minutesUntilStart >= 10) {
-            // 60分前〜10分前（プール金・大）
             return DELAY_5MIN;
         } else {
-            // 10分前〜直前（プール金・最大）
+            // 60分前〜直前（プール金・大/最大）
             return DELAY_1MIN;
         }
     }
