@@ -1,8 +1,6 @@
 package com.oddsalchemist.backend.controller;
 
-import com.oddsalchemist.backend.config.ScrapingProperties;
 import com.oddsalchemist.backend.service.GoogleSheetsService;
-import com.oddsalchemist.backend.service.OddsSyncService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,11 +22,7 @@ class OddsControllerTest {
     @BeforeEach
     void setUp() {
         googleSheetsService = mock(GoogleSheetsService.class);
-        controller = new OddsController(
-                mock(OddsSyncService.class),
-                mock(ScrapingProperties.class),
-                googleSheetsService
-        );
+        controller = new OddsController(googleSheetsService);
     }
 
     // ===== clearSheet =====

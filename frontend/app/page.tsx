@@ -12,11 +12,6 @@ const POLLING_INTERVAL_MS = 10_000;
 export default function Home() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8081';
 
-  // ===== 即時取得フォームの状態 =====
-  const [url, setUrl] = useState('');
-  const [status, setStatus] = useState<{ type: 'info' | 'success' | 'error'; message: string } | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
   // ===== アラート一覧の状態 =====
   const [alerts, setAlerts] = useState<AnomalyAlert[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -75,38 +70,6 @@ export default function Home() {
     const timer = setInterval(fetchTargetUrls, POLLING_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [fetchTargetUrls]);
-
-  /** 即時取得（手動スクレイピング） */
-  const handleStartMonitoring = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url) return;
-
-    setIsLoading(true);
-    setStatus({ type: 'info', message: 'バックエンドへリクエストを送信中...' });
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/odds/fetch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || '通信エラーが発生しました');
-      }
-
-      setStatus({ type: 'success', message: `成功: ${data.message}` });
-      setUrl('');
-      fetchAlerts();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '予期せぬエラーが発生しました';
-      setStatus({ type: 'error', message: `エラー: ${errorMessage}` });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   /** スケジュール監視URLを登録する */
   const handleRegisterUrl = async (e: React.FormEvent) => {
@@ -265,55 +228,6 @@ export default function Home() {
                 </ul>
               )}
             </div>
-
-            {/* 即時取得パネル（折りたたみ） */}
-            <details className="bg-white rounded-xl shadow-md">
-              <summary className="px-6 py-4 cursor-pointer text-sm font-medium text-gray-500 select-none list-none flex items-center gap-1">
-                <span className="text-gray-400">▶</span>
-                即時取得（手動スクレイピング）
-              </summary>
-              <div className="px-8 pb-8 pt-2 space-y-4">
-                <form onSubmit={handleStartMonitoring} className="space-y-4">
-                  <div>
-                    <label htmlFor="race-url" className="block text-sm font-medium text-gray-700 mb-1">
-                      対象レースのURL
-                    </label>
-                    <input
-                      type="url"
-                      id="race-url"
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                      placeholder="https://sports.yahoo.co.jp/keiba/race/odds/tfw/..."
-                      className="w-full px-4 py-2 border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isLoading || !url}
-                    className={`w-full py-2 px-4 rounded-md text-white font-medium transition-colors
-                      ${isLoading || !url
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-                      }`}
-                  >
-                    {isLoading ? '処理中...' : '取得する'}
-                  </button>
-                </form>
-
-                {status && (
-                  <div className={`p-4 rounded-md text-sm ${
-                    status.type === 'error'
-                      ? 'bg-red-50 text-red-800'
-                      : status.type === 'success'
-                        ? 'bg-green-50 text-green-800'
-                        : 'bg-blue-50 text-blue-800'
-                  }`}>
-                    {status.message}
-                  </div>
-                )}
-              </div>
-            </details>
 
             {/* データ管理パネル */}
             <details className="bg-white rounded-xl shadow-md">
