@@ -26,9 +26,8 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 ## システムアーキテクチャ
 
 ### データフロー
-- **即時取得**: フロントエンドから `POST /api/odds/fetch` でワンショットのスクレイピング・検知を実行。
-- **スケジュール監視**: `OddsScrapingScheduler` が `TargetUrlStore` に登録されたURLごとに独立した `ScheduledFuture` を持ち、自己再スケジュール方式で定期実行する。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。URL削除時は `cancelUrl()` でスケジュールも即時停止する。
-- **動的間隔**: 各URLの発走時刻キャッシュを `OddsSyncService.getCachedStartTime()` で参照し、残り時間に応じて 30分/15分/5分/1分 の4段階で間隔を切り替える。
+- **スケジュール監視**: `OddsScrapingScheduler` が `TargetUrlStore` に登録されたURLごとに独立した `ScheduledFuture` を持ち、自己再スケジュール方式で定期実行する。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。登録直後に即時フェッチが非同期実行される。URL削除時は `cancelUrl()` でスケジュールも即時停止する。
+- **動的間隔**: 各URLの発走時刻キャッシュを `OddsSyncService.getCachedStartTime()` で参照し、残り時間に応じて 30分/5分/1分 の3段階で間隔を切り替える。
 - **起動時復元**: `OddsScrapingScheduler` が `@EventListener(ApplicationReadyEvent.class)` で `TargetUrlStore.getUrls()` を参照し、各URLの初回スクレイピングを非同期で開始してスケジュールを再開する。
 
 ### 異常検知

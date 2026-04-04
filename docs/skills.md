@@ -48,7 +48,7 @@
 - `OddsScrapingScheduler` は URLごとに独立した `ScheduledFuture<?>` を `ConcurrentHashMap<String, ScheduledFuture<?>> taskMap` で管理し、自己再スケジュール方式で動作する。
 - 起動時復元: `@EventListener(ApplicationReadyEvent.class) restoreFromStore()` で `targetUrlStore.getUrls()` を参照し、各URLの初回スクレイピングを非同期で開始してスケジュールを再開する。
 - スクレイピング完了後: `scrapeAndReschedule()` が `updateExecutionTimes()` → `persistToSheet()` を呼んで Sheets の B・C列を更新する。
-- スクレイピング間隔は `OddsSyncService.getCachedStartTime(url)` の発走時刻から動的算出（30分/15分/5分/1分）。
+- スクレイピング間隔は `OddsSyncService.getCachedStartTime(url)` の発走時刻から動的算出（30分/5分/1分）。
 
 ### アーキテクチャと品質
 - クラスの責務を単一にし、肥大化を防ぐ（例: 取得処理、パース処理、保存処理は別クラスに分割する）。
