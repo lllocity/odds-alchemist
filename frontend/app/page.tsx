@@ -26,7 +26,6 @@ export default function Home() {
   const [isClearingSheet, setIsClearingSheet] = useState(false);
   const [clearStatus, setClearStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  /** アラート一覧をバックエンドから取得する */
   const fetchAlerts = useCallback(async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/odds/alerts`);
@@ -35,14 +34,17 @@ export default function Home() {
         return;
       }
       const data: AnomalyAlert[] = await response.json();
-      setAlerts([...data].reverse());
-      setLastUpdated(new Date());
+      const reversed = [...data].reverse();
+      setAlerts(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(reversed)) return prev;
+        setLastUpdated(new Date());
+        return reversed;
+      });
     } catch (error) {
       console.warn('アラート取得中にエラーが発生しました', error);
     }
   }, [apiBaseUrl]);
 
-  /** 登録済みスケジュール監視URLを実行時刻情報付きで取得する */
   const fetchTargetUrls = useCallback(async () => {
     try {
       const response = await fetch(`${apiBaseUrl}/api/odds/targets`);
@@ -51,25 +53,21 @@ export default function Home() {
         return;
       }
       const data: TargetUrlInfo[] = await response.json();
-      setTargetUrls(data);
+      setTargetUrls(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
     } catch (error) {
       console.warn('監視対象URL取得中にエラー', error);
     }
   }, [apiBaseUrl]);
 
-  /** 初回マウント時に即時取得し、以降は一定間隔でポーリング */
   useEffect(() => {
     fetchAlerts();
-    const timer = setInterval(fetchAlerts, POLLING_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [fetchAlerts]);
-
-  /** 初回マウント時に登録済みURLを取得し、以降はポーリングで実行時刻を更新 */
-  useEffect(() => {
     fetchTargetUrls();
-    const timer = setInterval(fetchTargetUrls, POLLING_INTERVAL_MS);
+    const timer = setInterval(() => {
+      fetchAlerts();
+      fetchTargetUrls();
+    }, POLLING_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [fetchTargetUrls]);
+  }, [fetchAlerts, fetchTargetUrls]);
 
   /** スケジュール監視URLを登録する */
   const handleRegisterUrl = async (e: React.FormEvent) => {
