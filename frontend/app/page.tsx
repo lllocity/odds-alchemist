@@ -237,6 +237,16 @@ export default function Home() {
                 データ管理
               </summary>
               <div className="px-6 pb-6 pt-2 space-y-3">
+                {process.env.NEXT_PUBLIC_SPREADSHEET_ID && (
+                  <a
+                    href={`https://docs.google.com/spreadsheets/d/${process.env.NEXT_PUBLIC_SPREADSHEET_ID}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                  >
+                    スプレッドシートを開く ↗
+                  </a>
+                )}
                 <p className="text-xs text-gray-500">ヘッダー行を除く全データを削除します。この操作は取り消せません。</p>
                 <div className="flex gap-3">
                   <button
