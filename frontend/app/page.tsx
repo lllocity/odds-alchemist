@@ -34,7 +34,7 @@ export default function Home() {
         return;
       }
       const data: AnomalyAlert[] = await response.json();
-      const reversed = [...data].reverse();
+      const reversed = [...data].reverse().slice(0, 30);
       setAlerts(prev => {
         if (JSON.stringify(prev) === JSON.stringify(reversed)) return prev;
         setLastUpdated(new Date());
@@ -110,7 +110,10 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setClearStatus({ type: 'success', message: data.message });
-      if (sheet === 'Alerts') fetchAlerts();
+      if (sheet === 'Alerts') {
+        setAlerts([]);
+        setLastUpdated(null);
+      }
     } catch (e) {
       setClearStatus({ type: 'error', message: e instanceof Error ? e.message : 'クリアに失敗しました' });
     } finally {

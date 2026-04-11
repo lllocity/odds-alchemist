@@ -50,7 +50,7 @@ export default function AlertList({ alerts, lastUpdated }: AlertListProps) {
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-gray-800">検知アラート</h2>
+        <h2 className="text-lg font-semibold text-gray-800">検知アラート<span className="text-xs font-normal text-gray-400 ml-2">最新30件</span></h2>
         {lastUpdated && (
           <span className="text-xs text-gray-400">
             最終更新: {lastUpdated.toLocaleTimeString('ja-JP')}
