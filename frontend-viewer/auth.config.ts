@@ -6,11 +6,5 @@ export const authConfig: NextAuthConfig = {
     signIn: '/login',
     error: '/login',
   },
-  callbacks: {
-    authorized({ auth }) {
-      const allowedEmail = process.env.ALLOWED_EMAIL;
-      return !!auth?.user?.email && auth.user.email === allowedEmail;
-    },
-  },
   providers: [],
 };

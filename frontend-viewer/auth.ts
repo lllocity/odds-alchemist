@@ -16,7 +16,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    ...authConfig.callbacks,
     signIn({ profile }) {
       const allowedEmail = process.env.ALLOWED_EMAIL;
       if (!allowedEmail) {
