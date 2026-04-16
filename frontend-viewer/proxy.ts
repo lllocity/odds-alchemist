@@ -2,7 +2,10 @@ import { auth } from '@/auth';
 import { NextResponse } from 'next/server';
 
 export default auth((req) => {
-  if (!req.auth) {
+  const allowedEmail = process.env.ALLOWED_EMAIL;
+  const sessionEmail = req.auth?.user?.email;
+
+  if (!sessionEmail || sessionEmail !== allowedEmail) {
     const signInUrl = new URL('/api/auth/signin', req.url);
     return NextResponse.redirect(signInUrl);
   }
