@@ -95,7 +95,9 @@ GCP サービスアカウント
 - Step 23: GCP 読み取り専用 SA 作成 ✅
 - Step 24: Google OAuth クライアント作成 ✅
 - Step 25: frontend-viewer/ プロジェクト新規作成 ✅（コミット済み）
-- Step 26〜31: 未着手
+- Step 26: lib/sheets.ts 実装（Sheets クライアント） ✅（コミット済み）
+- Step 27: API Route Handlers 実装 ✅（コミット済み）
+- Step 28〜31: 未着手
 
 **実装ステップ詳細**: `docs/step23_gcp_readonly_sa.md` 〜 `docs/step31_vercel_deploy.md` を参照。
 
