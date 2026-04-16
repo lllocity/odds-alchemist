@@ -1,65 +1,101 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { signOut } from 'next-auth/react';
+import AlertList from '@/app/components/AlertList';
+import OddsTrendChart from '@/app/components/OddsTrendChart';
+import { AnomalyAlert } from '@/app/types/oddsAlert';
+
+/** アラートをポーリングする間隔（ミリ秒）: スクレイピング最短間隔1分に対し10秒で追従 */
+const POLLING_INTERVAL_MS = 10_000;
 
 export default function Home() {
+  const [alerts, setAlerts] = useState<AnomalyAlert[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/alerts');
+      if (!response.ok) {
+        console.warn(`アラート取得に失敗しました: ${response.status}`);
+        return;
+      }
+      const data: AnomalyAlert[] = await response.json();
+      setAlerts(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+        setLastUpdated(new Date());
+        return data;
+      });
+    } catch (error) {
+      console.warn('アラート取得中にエラーが発生しました', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAlerts();
+    const timer = setInterval(fetchAlerts, POLLING_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [fetchAlerts]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <>
+      {/* ヘッダーバー */}
+      <header className="w-full bg-[#0d1b2e] px-8 py-3 flex items-center gap-4 shadow-lg">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="" className="h-11 w-auto" />
+        <h1 className="text-lg font-semibold tracking-widest text-slate-200">配当の錬金術師</h1>
+        <div className="ml-auto">
+          <button
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            サインアウト
+          </button>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+
+      <main className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="grid grid-cols-2 gap-6 items-start">
+
+            {/* 左カラム: オッズ推移グラフ */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <OddsTrendChart />
+              </div>
+            </div>
+
+            {/* 右カラム: 買いの掟 + 検知アラート */}
+            <div className="space-y-4 sticky top-6">
+
+              {/* 買いの掟 */}
+              <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-4">
+                <p className="text-xs font-bold text-amber-800 mb-2 tracking-wide">⚠ 買いの掟</p>
+                <ul className="space-y-1">
+                  <li className="text-xs text-amber-900">
+                    ・オッズの動きだけ見て買うな。アラートが鳴って初めて動け。
+                  </li>
+                  <li className="text-xs text-amber-900">
+                    ・人気があり、かつ単勝オッズが緩やかに下がり続けている馬は軸候補。資金が継続して入っている証拠。
+                  </li>
+                  <li className="text-xs text-amber-900">
+                    ・複勝オッズだけが緩やかに下がっている馬は対抗候補。「飛ぶよりは来る」と見られている。
+                  </li>
+                  <li className="text-xs text-amber-900">
+                    ・単勝・複勝がともに緩やかに上がっている馬は切り候補。人気離れが進んでいるサイン。
+                  </li>
+                </ul>
+              </div>
+
+              {/* 検知アラート */}
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <AlertList alerts={alerts} lastUpdated={lastUpdated} />
+              </div>
+
+            </div>
+          </div>
         </div>
       </main>
-    </div>
+    </>
   );
 }

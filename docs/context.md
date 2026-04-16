@@ -98,7 +98,8 @@ GCP サービスアカウント
 - Step 26: lib/sheets.ts 実装（Sheets クライアント） ✅（コミット済み）
 - Step 27: API Route Handlers 実装 ✅（コミット済み）
 - Step 28: NextAuth v5 + Google OAuth + proxy（認証ミドルウェア） ✅（コミット済み）
-- Step 29〜31: 未着手
+- Step 29: 閲覧用 page.tsx・コンポーネント移植 ✅（コミット済み）
+- Step 30〜31: 未着手
 
 **Step 28 実装上の注意点**:
 - `middleware.ts` は Next.js 16 で `proxy.ts` に改名
