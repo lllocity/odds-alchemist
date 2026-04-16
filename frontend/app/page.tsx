@@ -1,20 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import AlertList from '@/app/components/AlertList';
-import OddsTrendChart from '@/app/components/OddsTrendChart';
-import { AnomalyAlert } from '@/app/types/oddsAlert';
 import { TargetUrlInfo } from '@/app/types/targetUrl';
 
-/** アラートをポーリングする間隔（ミリ秒）: スクレイピング最短間隔1分に対し10秒で追従 */
+/** 監視URLをポーリングする間隔（ミリ秒） */
 const POLLING_INTERVAL_MS = 10_000;
 
 export default function Home() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8081';
-
-  // ===== アラート一覧の状態 =====
-  const [alerts, setAlerts] = useState<AnomalyAlert[]>([]);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // ===== スケジュール監視URL管理の状態 =====
   const [targetUrls, setTargetUrls] = useState<TargetUrlInfo[]>([]);
@@ -25,25 +18,6 @@ export default function Home() {
   // ===== データ管理（シートクリア）の状態 =====
   const [isClearingSheet, setIsClearingSheet] = useState(false);
   const [clearStatus, setClearStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  const fetchAlerts = useCallback(async () => {
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/odds/alerts`);
-      if (!response.ok) {
-        console.warn(`アラート取得に失敗しました: ${response.status}`);
-        return;
-      }
-      const data: AnomalyAlert[] = await response.json();
-      const reversed = [...data].reverse().slice(0, 30);
-      setAlerts(prev => {
-        if (JSON.stringify(prev) === JSON.stringify(reversed)) return prev;
-        setLastUpdated(new Date());
-        return reversed;
-      });
-    } catch (error) {
-      console.warn('アラート取得中にエラーが発生しました', error);
-    }
-  }, [apiBaseUrl]);
 
   const fetchTargetUrls = useCallback(async () => {
     try {
@@ -60,14 +34,10 @@ export default function Home() {
   }, [apiBaseUrl]);
 
   useEffect(() => {
-    fetchAlerts();
     fetchTargetUrls();
-    const timer = setInterval(() => {
-      fetchAlerts();
-      fetchTargetUrls();
-    }, POLLING_INTERVAL_MS);
+    const timer = setInterval(fetchTargetUrls, POLLING_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [fetchAlerts, fetchTargetUrls]);
+  }, [fetchTargetUrls]);
 
   /** スケジュール監視URLを登録する */
   const handleRegisterUrl = async (e: React.FormEvent) => {
@@ -110,10 +80,6 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setClearStatus({ type: 'success', message: data.message });
-      if (sheet === 'Alerts') {
-        setAlerts([]);
-        setLastUpdated(null);
-      }
     } catch (e) {
       setClearStatus({ type: 'error', message: e instanceof Error ? e.message : 'クリアに失敗しました' });
     } finally {
@@ -153,167 +119,126 @@ export default function Home() {
       </header>
 
       <main className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
+        <div className="max-w-2xl mx-auto space-y-6">
 
-        <div className="grid grid-cols-2 gap-6 items-start">
+          {/* スケジュール監視対象URL管理パネル */}
+          <div className="bg-white rounded-xl shadow-md p-6">
+            <h2 className="text-base font-semibold text-gray-800 mb-2">
+              スケジュール監視対象URL
+            </h2>
+            <div className="mb-4 text-xs text-gray-400 border border-gray-100 rounded-md px-3 py-2 bg-gray-50 leading-relaxed">
+              <span className="font-medium text-gray-500">取得間隔：</span>
+              午前中 / 発走後 → 30分　／　12時以降・発走60分超前 → 5分　／　発走60分前〜直前 → 1分
+            </div>
 
-          {/* 左カラム: 操作系パネル */}
-          <div className="space-y-6">
+            <form onSubmit={handleRegisterUrl} className="flex gap-2 mb-3">
+              <input
+                type="url"
+                value={targetUrlInput}
+                onChange={(e) => setTargetUrlInput(e.target.value)}
+                placeholder="https://sports.yahoo.co.jp/keiba/race/odds/tfw/..."
+                className="flex-1 px-3 py-2 text-sm border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                required
+              />
+              <button
+                type="submit"
+                disabled={isRegisteringUrl || !targetUrlInput}
+                className={`shrink-0 px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
+                  ${isRegisteringUrl || !targetUrlInput
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                  }`}
+              >
+                {isRegisteringUrl ? '登録中...' : '登録'}
+              </button>
+            </form>
 
-            {/* スケジュール監視対象URL管理パネル */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h2 className="text-base font-semibold text-gray-800 mb-2">
-                スケジュール監視対象URL
-              </h2>
-              <div className="mb-4 text-xs text-gray-400 border border-gray-100 rounded-md px-3 py-2 bg-gray-50 leading-relaxed">
-                <span className="font-medium text-gray-500">取得間隔：</span>
-                午前中 / 発走後 → 30分　／　12時以降・発走60分超前 → 5分　／　発走60分前〜直前 → 1分
+            {urlActionStatus && (
+              <div className={`mb-3 p-2 rounded text-xs ${
+                urlActionStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
+              }`}>
+                {urlActionStatus.message}
               </div>
+            )}
 
-              <form onSubmit={handleRegisterUrl} className="flex gap-2 mb-3">
-                <input
-                  type="url"
-                  value={targetUrlInput}
-                  onChange={(e) => setTargetUrlInput(e.target.value)}
-                  placeholder="https://sports.yahoo.co.jp/keiba/race/odds/tfw/..."
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  required
-                />
-                <button
-                  type="submit"
-                  disabled={isRegisteringUrl || !targetUrlInput}
-                  className={`shrink-0 px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
-                    ${isRegisteringUrl || !targetUrlInput
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700'
-                    }`}
-                >
-                  {isRegisteringUrl ? '登録中...' : '登録'}
-                </button>
-              </form>
-
-              {urlActionStatus && (
-                <div className={`mb-3 p-2 rounded text-xs ${
-                  urlActionStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
-                }`}>
-                  {urlActionStatus.message}
-                </div>
-              )}
-
-              {targetUrls.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-3">
-                  登録済みのURLはありません
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {targetUrls.map((info) => (
-                    <li
-                      key={info.url}
-                      className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded px-3 py-2"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <span className="block truncate text-gray-800">{info.url}</span>
-                        <div className="mt-1 flex gap-4 text-gray-400">
-                          <span>最終実行: {info.lastExecutionTime ?? '未実行'}</span>
-                          <span>次回予定: {info.nextScheduledTime ?? '未設定'}</span>
-                        </div>
+            {targetUrls.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-3">
+                登録済みのURLはありません
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {targetUrls.map((info) => (
+                  <li
+                    key={info.url}
+                    className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded px-3 py-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <span className="block truncate text-gray-800">{info.url}</span>
+                      <div className="mt-1 flex gap-4 text-gray-400">
+                        <span>最終実行: {info.lastExecutionTime ?? '未実行'}</span>
+                        <span>次回予定: {info.nextScheduledTime ?? '未設定'}</span>
                       </div>
-                      <button
-                        onClick={() => handleRemoveUrl(info.url)}
-                        className="shrink-0 text-red-500 hover:text-red-700 font-medium mt-0.5"
-                      >
-                        削除
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveUrl(info.url)}
+                      className="shrink-0 text-red-500 hover:text-red-700 font-medium mt-0.5"
+                    >
+                      削除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* データ管理パネル */}
+          <details className="bg-white rounded-xl shadow-md">
+            <summary className="px-6 py-4 cursor-pointer text-sm font-medium text-gray-500 select-none list-none flex items-center gap-1">
+              <span className="text-gray-400">▶</span>
+              データ管理
+            </summary>
+            <div className="px-6 pb-6 pt-2 space-y-3">
+              {process.env.NEXT_PUBLIC_SPREADSHEET_ID && (
+                <a
+                  href={`https://docs.google.com/spreadsheets/d/${process.env.NEXT_PUBLIC_SPREADSHEET_ID}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                >
+                  スプレッドシートを開く ↗
+                </a>
+              )}
+              <p className="text-xs text-gray-500">ヘッダー行を除く全データを削除します。この操作は取り消せません。</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleClearSheet('OddsData')}
+                  disabled={isClearingSheet}
+                  className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
+                    ${isClearingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                >
+                  オッズデータをクリア
+                </button>
+                <button
+                  onClick={() => handleClearSheet('Alerts')}
+                  disabled={isClearingSheet}
+                  className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
+                    ${isClearingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                >
+                  アラート履歴をクリア
+                </button>
+              </div>
+              {clearStatus && (
+                <div className={`p-2 rounded text-xs ${
+                  clearStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
+                }`}>
+                  {clearStatus.message}
+                </div>
               )}
             </div>
-
-            {/* データ管理パネル */}
-            <details className="bg-white rounded-xl shadow-md">
-              <summary className="px-6 py-4 cursor-pointer text-sm font-medium text-gray-500 select-none list-none flex items-center gap-1">
-                <span className="text-gray-400">▶</span>
-                データ管理
-              </summary>
-              <div className="px-6 pb-6 pt-2 space-y-3">
-                {process.env.NEXT_PUBLIC_SPREADSHEET_ID && (
-                  <a
-                    href={`https://docs.google.com/spreadsheets/d/${process.env.NEXT_PUBLIC_SPREADSHEET_ID}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                  >
-                    スプレッドシートを開く ↗
-                  </a>
-                )}
-                <p className="text-xs text-gray-500">ヘッダー行を除く全データを削除します。この操作は取り消せません。</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleClearSheet('OddsData')}
-                    disabled={isClearingSheet}
-                    className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
-                      ${isClearingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
-                  >
-                    オッズデータをクリア
-                  </button>
-                  <button
-                    onClick={() => handleClearSheet('Alerts')}
-                    disabled={isClearingSheet}
-                    className={`px-4 py-2 rounded-md text-white text-sm font-medium transition-colors
-                      ${isClearingSheet ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
-                  >
-                    アラート履歴をクリア
-                  </button>
-                </div>
-                {clearStatus && (
-                  <div className={`p-2 rounded text-xs ${
-                    clearStatus.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-green-50 text-green-800'
-                  }`}>
-                    {clearStatus.message}
-                  </div>
-                )}
-              </div>
-            </details>
-
-            {/* オッズ推移グラフパネル */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <OddsTrendChart />
-            </div>
-
-          </div>
-
-          {/* 右カラム: 買いの掟 + 検知アラート */}
-          <div className="space-y-4 sticky top-6">
-
-            {/* 買いの掟 */}
-            <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-4">
-              <p className="text-xs font-bold text-amber-800 mb-2 tracking-wide">⚠ 買いの掟</p>
-              <ul className="space-y-1">
-                <li className="text-xs text-amber-900">
-                  ・オッズの動きだけ見て買うな。アラートが鳴って初めて動け。
-                </li>
-                <li className="text-xs text-amber-900">
-                  ・人気があり、かつ単勝オッズが緩やかに下がり続けている馬は軸候補。資金が継続して入っている証拠。
-                </li>
-                <li className="text-xs text-amber-900">
-                  ・複勝オッズだけが緩やかに下がっている馬は対抗候補。「飛ぶよりは来る」と見られている。
-                </li>
-                <li className="text-xs text-amber-900">
-                  ・単勝・複勝がともに緩やかに上がっている馬は切り候補。人気離れが進んでいるサイン。
-                </li>
-              </ul>
-            </div>
-
-            {/* 検知アラート */}
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <AlertList alerts={alerts} lastUpdated={lastUpdated} />
-            </div>
-          </div>
+          </details>
 
         </div>
-      </div>
-    </main>
+      </main>
     </>
   );
 }
