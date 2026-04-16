@@ -55,7 +55,8 @@
 - オッズパース処理などの複雑なロジックに対しては、JUnit 5を用いた単体テストを必ず記述し、想定されるHTMLパターン（正常系・異常系・一部データ欠損）を網羅すること。
 
 ### CORS設定パターン
-- 各 `@RestController` に `@CrossOrigin(origins = "http://localhost:3000")` を付与するシンプルなパターンを採用している。
+- 各 `@RestController` に `@CrossOrigin(origins = "http://localhost:3000")` を付与するシンプルなパターンを採用している（管理用 FE との通信用）。
+- 閲覧用 FE（`frontend-viewer/`）はバックエンドに直接アクセスしないため、CORS 設定は不要。
 - 複数のコントローラーが同じ `/api/odds` パスを共有してもSpringは正常に処理できる（HTTPメソッドとパスの組み合わせが一意であればよい）。
 
 ### Spring Boot バージョン注意事項
@@ -67,19 +68,35 @@
 ## フロントエンド
 
 ### TypeScriptの型定義ルール
-- バックエンドのDTOが変更された場合は、対応する `frontend/app/types/` 配下の型定義ファイルを**必ず同時に更新**すること。型の不一致はランタイムエラーの原因となる。
+- バックエンドのDTOが変更された場合は、対応する型定義ファイルを**必ず同時に更新**すること。型の不一致はランタイムエラーの原因となる。
+  - 管理用 FE: `frontend/app/types/`
+  - 閲覧用 FE: `frontend-viewer/app/types/`（管理用 FE と共有しない独立した定義）
 - DTOの日時フィールドはバックエンドで `DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")` でフォーマットした `String` として渡し、TypeScript側でも `string` 型で受け取る。
 - `alertType` など値が有限のフィールドは `type AlertType = '支持率急増' | '順位乖離' | 'トレンド逸脱'` のようにリテラル型 Union で定義し、`any` や `string` で曖昧にしない。
 
 ### ディレクトリ構成
-- 型定義: `frontend/app/types/` 配下に機能単位で配置（例: `oddsAlert.ts`）。
-- UIコンポーネント: `frontend/app/components/` 配下に配置（例: `AlertList.tsx`）。
-- `@/app/...` の絶対パスインポートを使用（`tsconfig.json` の `"paths": {"@/*": ["./*"]}` 参照）。
+
+FE は機能別に2プロジェクトに分かれている。ファイルの配置・インポートパスは編集対象のプロジェクトに合わせること。
+
+**管理用 FE (`frontend/`)**
+- 型定義: `frontend/app/types/` 配下（例: `targetUrl.ts`）
+- UIコンポーネント: `frontend/app/components/` 配下
+- グラフ・アラート関連コンポーネント（`AlertList.tsx`, `OddsTrendChart.tsx`）と型定義（`oddsAlert.ts`）は**閲覧用 FE に移管済み**。管理用 FE には存在しない。
+
+**閲覧用 FE (`frontend-viewer/`)**
+- 型定義: `frontend-viewer/app/types/` 配下（例: `oddsAlert.ts`, `oddsHistory.ts`）
+- UIコンポーネント: `frontend-viewer/app/components/` 配下（例: `AlertList.tsx`, `OddsTrendChart.tsx`）
+- API Route Handlers: `frontend-viewer/app/api/` 配下（Sheets 直読み）
+- 認証設定: `frontend-viewer/auth.ts`（フル設定）, `frontend-viewer/auth.config.ts`（edge-compatible）
+- プロキシ（認証ミドルウェア）: `frontend-viewer/proxy.ts`（Next.js 16 では `middleware.ts` でなく `proxy.ts`）
+
+両プロジェクト共通: `@/app/...` の絶対パスインポートを使用（`tsconfig.json` の `"paths": {"@/*": ["./*"]}` 参照）。
 
 ### ポーリング実装パターン
 - `useCallback` でフェッチ関数を定義し、`useEffect` で初回即時実行 + `setInterval` でポーリングを設定する。
 - クリーンアップ関数 `return () => clearInterval(timer)` を忘れずに書くこと（コンポーネントアンマウント時のメモリリーク防止）。
-- `apiBaseUrl` は `process.env.NEXT_PUBLIC_API_BASE_URL` 経由で取得し、`useCallback` の依存配列に含めること。
+- **管理用 FE**: バックエンド URL は `process.env.NEXT_PUBLIC_API_BASE_URL` 経由で取得し、`useCallback` の依存配列に含めること。
+- **閲覧用 FE**: API Route Handlers（`/api/...`）を相対パスで呼ぶ。`apiBaseUrl` は不要。`useCallback` の依存配列に `apiBaseUrl` を含めないこと。
 
 ### 検知タイプ別スタイリングのパターン
 - `Record<AlertType, ConfigObject>` 形式の設定オブジェクトで、色・説明・値フォーマッタを一元管理する。
@@ -93,6 +110,17 @@
 - `Line` の `connectNulls` を設定すると null 値があっても線が途切れない
 - X軸に文字列の日時を渡す場合は `tickFormatter` で `"HH:mm"` 形式に変換する
 - `dataKey` は TypeScript 型のフィールド名と一致させること
+
+### NextAuth v5 + Google OAuth の実装パターン（閲覧用 FE）
+
+- `auth.config.ts`（edge-compatible）と `auth.ts`（フル設定）に分離すること。`proxy.ts` は `auth.config.ts` のみを import する。
+- **Next.js 16 では `middleware.ts` を `proxy.ts` に改名すること**（Next.js 16 の仕様変更）。
+- `proxy.ts` での認証判定は `auth()` ラッパーや `authorized` コールバックを使わず、`getToken`（`next-auth/jwt`）で直接 JWT を読む方式を採用すること。`authorized` コールバックは Next.js 16 の proxy context で正常動作しない。
+- Google プロバイダーに `authorization: { params: { prompt: 'select_account' } }` を設定すること（Google OAuth セッションが残っていても毎回アカウント選択を強制させるため）。
+- `signIn` コールバックで `profile?.email !== ALLOWED_EMAIL` の場合に `return false` を返し、セッション作成を阻止すること。
+- `proxy.ts` で不正メールのリダイレクト時は `response.cookies.delete('authjs.session-token')` と `response.cookies.delete('__Secure-authjs.session-token')` で両方のセッションクッキーを削除すること。
+- NextAuth v5 の built-in サインインページ（`/api/auth/signin`）はリダイレクトループを引き起こすため、`pages: { signIn: '/login', error: '/login' }` でカスタムページに向けること。
+- 環境変数: `NEXTAUTH_SECRET`（または `AUTH_SECRET`）、`NEXTAUTH_URL`、`AUTH_GOOGLE_ID`、`AUTH_GOOGLE_SECRET`、`ALLOWED_EMAIL`。
 
 ### カスケードドロップダウンのパターン（URL → 馬）
 - URLドロップダウン変更時に `setSelectedHorse('')` / `setHorses([])` / `setChartData(null)` をリセットすること
