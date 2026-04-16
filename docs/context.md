@@ -14,11 +14,25 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
   - 開発起動: `./gradlew bootRun`
   - テスト実行: `./gradlew test`
 
-### フロントエンド (`/frontend`)
-- **環境**: Next.js 14+ (App Router), React, TypeScript
+### 管理用フロントエンド (`/frontend`)
+- **環境**: Next.js (App Router), React, TypeScript
 - **スタイリング**: Tailwind CSS
+- **機能**: スケジュール監視URL登録・削除、データ管理（シートクリア・スプレッドシートリンク）
+- **起動**: Docker Compose（自宅ローカルのみ）
 - **ビルド・実行**:
   - 開発起動: `npm run dev`
+  - ビルド: `npm run build`
+
+### 閲覧用フロントエンド (`/frontend-viewer`)
+- **環境**: Next.js (App Router), React, TypeScript
+- **スタイリング**: Tailwind CSS
+- **機能**: オッズ推移グラフ・検知アラート・買いの掟（読み取り専用）
+- **デプロイ先**: Vercel（外部からアクセス可能）
+- **認証**: NextAuth v5 + Google OAuth（特定アカウントのみ許可）
+- **データアクセス**: Google Sheets API を直接呼び出し（バックエンド不要）
+- **追加パッケージ**: `next-auth@beta` `googleapis` `recharts`
+- **ビルド・実行**:
+  - 開発起動: `npm run dev -- --port 3001`
   - ビルド: `npm run build`
 
 ---
@@ -29,6 +43,24 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 - **スケジュール監視**: `OddsScrapingScheduler` が `TargetUrlStore` に登録されたURLごとに独立した `ScheduledFuture` を持ち、自己再スケジュール方式で定期実行する。URLはフロントエンドから `POST /api/odds/targets` で動的登録のみ（起動時は空）。登録直後に即時フェッチが非同期実行される。URL削除時は `cancelUrl()` でスケジュールも即時停止する。
 - **動的間隔**: 各URLの発走時刻キャッシュを `OddsSyncService.getCachedStartTime()` で参照し、残り時間に応じて 30分/5分/1分 の3段階で間隔を切り替える。
 - **起動時復元**: `OddsScrapingScheduler` が `@EventListener(ApplicationReadyEvent.class)` で `TargetUrlStore.getUrls()` を参照し、各URLの初回スクレイピングを非同期で開始してスケジュールを再開する。
+
+### フロントエンド構成
+
+```
+[自宅 Docker Compose]                    [Vercel]
+  管理用 FE (frontend/)                   閲覧用 FE (frontend-viewer/)
+    - URL登録                               - オッズ推移グラフ
+    - データ管理         Google Sheets       - 検知アラート
+         ↓              ↗        ↖          - 買いの掟
+  BE (Spring Boot) ────┘          └──── Sheets API 直読み
+                                          （read-only SA）
+GCP サービスアカウント
+  [既存] 読み書き → BE が使用
+  [新規] 読み取り専用 → 閲覧用 FE が使用
+```
+
+閲覧用 FE は BE に依存せず Google Sheets を直接読む。
+管理操作（URL登録・データクリア）は自宅ローカルからのみ実行可能。
 
 ### 異常検知
 - `OddsAnomalyDetector` がロジックA（支持率急増）・B（順位乖離）・C（トレンド逸脱）を実行。
@@ -47,6 +79,27 @@ JRA（日本中央競馬会）のオッズ情報を定期的に取得し、Googl
 ---
 
 ## 決定事項・議論ログ
+
+### Step 25〜31: 閲覧用 FE (Vercel) 新設（進行中, 2026-04-16）
+
+**背景**: 自宅 WiFi 外からオッズ推移・アラートを閲覧したいニーズが発生。
+データは Google Sheets に集約済みのため、Sheets 直読みの閲覧専用 FE を Vercel にデプロイする構成を採用。
+
+**意思決定**:
+- **ストレージ移行はしない**: Sheets の行数は個人用途で許容範囲内。パフォーマンス劣化が顕在化した段階で Neon (PostgreSQL Serverless) への移行を検討する。
+- **認証方式**: Google OAuth (NextAuth v5) を採用。パスワード認証も検討したが、意図（特定 Google アカウントのみ許可）が明確なため OAuth を選択。
+- **読み取り専用 SA を別途作成**: 漏洩時の被害範囲を「Sheets が読まれる」止まりにするため、書き込み権限を持たない専用サービスアカウントを使用。
+- **管理用 FE から閲覧系機能を削除（Step 30）**: グラフ・アラート・買いの掟は閲覧用 FE に移管。管理用 FE はURL登録・データ管理のみに絞る。
+
+**進捗**:
+- Step 23: GCP 読み取り専用 SA 作成 ✅
+- Step 24: Google OAuth クライアント作成 ✅
+- Step 25: frontend-viewer/ プロジェクト新規作成 ✅（コミット済み）
+- Step 26〜31: 未着手
+
+**実装ステップ詳細**: `docs/step23_gcp_readonly_sa.md` 〜 `docs/step31_vercel_deploy.md` を参照。
+
+---
 
 ### Step 22: オッズ推移グラフ 実装完了 (2026-03-19)
 
