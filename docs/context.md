@@ -100,6 +100,14 @@ GCP サービスアカウント
 - Step 28: NextAuth v5 + Google OAuth + proxy（認証ミドルウェア） ✅（コミット済み）
 - Step 29〜31: 未着手
 
+**Step 28 実装上の注意点**:
+- `middleware.ts` は Next.js 16 で `proxy.ts` に改名
+- NextAuth の `authorized` コールバックは proxy context で動作しないため `getToken`（`next-auth/jwt`）で直接 JWT を読む方式に変更
+- `auth.config.ts`（edge-compatible）と `auth.ts`（フル設定）に分離
+- Google プロバイダーに `prompt: 'select_account'` を設定（Google OAuth セッションが残っても毎回アカウント選択を強制）
+- `signIn` コールバックで ALLOWED_EMAIL 以外のセッション作成を阻止
+- proxy で不正メールのセッションクッキーを強制削除
+
 **実装ステップ詳細**: `docs/step23_gcp_readonly_sa.md` 〜 `docs/step31_vercel_deploy.md` を参照。
 
 ---
