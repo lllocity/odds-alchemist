@@ -68,3 +68,13 @@ frontend/.vercel
 ### TypeScript ###
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
+
+### ========== Frontend Viewer ========== ###
+frontend-viewer/node_modules/
+frontend-viewer/.next/
+frontend-viewer/out/
+frontend-viewer/build/
+frontend-viewer/.env*
+frontend-viewer/.vercel
+frontend-viewer/*.tsbuildinfo
+frontend-viewer/next-env.d.ts
