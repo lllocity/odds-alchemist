@@ -112,10 +112,11 @@ export default function Home() {
   return (
     <>
       {/* ヘッダーバー */}
-      <header className="w-full bg-[#0d1b2e] px-8 py-3 flex items-center gap-4 shadow-lg">
+      <header className="w-full bg-emerald-900 px-8 py-3 flex items-center gap-4 shadow-lg">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="" className="h-11 w-auto" />
         <h1 className="text-lg font-semibold tracking-widest text-slate-200">配当の錬金術師</h1>
+        <span className="text-xs font-medium text-emerald-200 border border-emerald-700 rounded px-2 py-0.5">管理者</span>
       </header>
 
       <main className="min-h-screen bg-gray-50 p-6">
