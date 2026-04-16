@@ -17,5 +17,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return profile?.email === allowedEmail;
     },
+    authorized({ auth: session }) {
+      const allowedEmail = process.env.ALLOWED_EMAIL;
+      return !!session?.user?.email && session.user.email === allowedEmail;
+    },
   },
 });
