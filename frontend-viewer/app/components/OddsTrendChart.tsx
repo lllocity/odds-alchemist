@@ -239,7 +239,7 @@ export default function OddsTrendChart() {
           {/* 単勝グラフ */}
           <div>
             <p className="text-xs font-medium text-gray-600 mb-1 text-center">単勝オッズ</p>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" aspect={2.5}>
               <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
@@ -308,7 +308,7 @@ export default function OddsTrendChart() {
           {/* 複勝グラフ */}
           <div>
             <p className="text-xs font-medium text-gray-600 mb-1 text-center">複勝オッズ</p>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" aspect={2.5}>
               <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis

@@ -40,7 +40,7 @@ export default function Home() {
   return (
     <>
       {/* ヘッダーバー */}
-      <header className="w-full bg-[#0d1b2e] px-8 py-3 flex items-center gap-4 shadow-lg">
+      <header className="w-full bg-[#0d1b2e] px-4 sm:px-8 py-3 flex items-center gap-4 shadow-lg">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="" className="h-11 w-auto" />
         <h1 className="text-lg font-semibold tracking-widest text-slate-200">配当の錬金術師</h1>
@@ -54,19 +54,19 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="min-h-screen bg-gray-50 p-6">
+      <main className="min-h-screen bg-gray-50 p-3 sm:p-6">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 gap-6 items-start">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 items-start">
 
             {/* 左カラム: オッズ推移グラフ */}
             <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-md p-6">
+              <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
                 <OddsTrendChart />
               </div>
             </div>
 
             {/* 右カラム: 買いの掟 + 検知アラート */}
-            <div className="space-y-4 sticky top-6">
+            <div className="space-y-4 sm:sticky sm:top-6">
 
               {/* 買いの掟 */}
               <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-4">
@@ -88,7 +88,7 @@ export default function Home() {
               </div>
 
               {/* 検知アラート */}
-              <div className="bg-white rounded-xl shadow-md p-6">
+              <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
                 <AlertList alerts={alerts} lastUpdated={lastUpdated} />
               </div>
 

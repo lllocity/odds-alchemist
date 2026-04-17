@@ -96,14 +96,14 @@ export default function AlertList({ alerts, lastUpdated }: AlertListProps) {
                 className="p-3 bg-white border border-gray-100 rounded-md"
               >
                 {/* 1行目: タイプラベル・レース名・検知時刻 */}
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
                   <span
                     className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${config.bg} ${config.text}`}
                   >
                     {config.label}
                   </span>
-                  <span className="text-xs text-gray-400 truncate">{alert.raceName}</span>
-                  <span className="shrink-0 text-xs text-gray-400 ml-auto">
+                  <span className="text-xs text-gray-400 truncate min-w-0 flex-1">{alert.raceName}</span>
+                  <span className="shrink-0 text-xs text-gray-400">
                     {formatTime(alert.detectedAt)}
                   </span>
                 </div>
