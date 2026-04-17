@@ -33,8 +33,8 @@ Vercel の Project Settings → Environment Variables に以下を設定:
 | `GOOGLE_SHEETS_SPREADSHEET_ID` | スプレッドシート ID | シート識別子 |
 | `AUTH_GOOGLE_ID` | OAuth クライアント ID | Step 24 で取得 |
 | `AUTH_GOOGLE_SECRET` | OAuth クライアントシークレット | Step 24 で取得 |
-| `NEXTAUTH_SECRET` | `openssl rand -base64 32` の出力 | セッション暗号化 |
-| `NEXTAUTH_URL` | `https://<your-app>.vercel.app` | デプロイ後に確定 |
+| `AUTH_SECRET` | `openssl rand -base64 32` の出力 | セッション暗号化・state 復号（必須） |
+| `AUTH_URL` | `https://<your-app>.vercel.app` | デプロイ後に確定 |
 | `ALLOWED_EMAIL` | `your@gmail.com` | アクセス許可アカウント |
 
 ### 3. デプロイ完了後：OAuth リダイレクト URI を更新
