@@ -18,3 +18,7 @@ export type AlertHistoryItem = {
   alertType: string;
   value: number;
 };
+
+/** 複数馬のオッズを1タイムスタンプにマージしたグラフ用型 */
+export type MergedChartItem = Record<string, string | number | null>;
+// キー例: "detectedAt", "シンザン_win", "シンザン_placeMin", "シンザン_placeMax"

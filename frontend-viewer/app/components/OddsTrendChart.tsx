@@ -5,7 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { OddsHistoryItem, HorseOption, AlertHistoryItem } from '@/app/types/oddsHistory';
+import { OddsHistoryItem, HorseOption, AlertHistoryItem, MergedChartItem } from '@/app/types/oddsHistory';
 import { AlertType } from '@/app/types/oddsAlert';
 
 const ALERT_COLORS: Record<AlertType, string> = {
@@ -14,6 +14,8 @@ const ALERT_COLORS: Record<AlertType, string> = {
   'トレンド逸脱': '#dc2626',
 };
 
+const MAX_HORSES = 3;
+const HORSE_COLORS = ['#2563eb', '#e11d48', '#d97706'];
 
 type AlertMarker = { x: string; type: AlertType; value: number };
 
@@ -25,15 +27,32 @@ function parseDataAt(s: string): Date {
   return new Date(y, m - 1, d, h, min, sec);
 }
 
+/** 複数馬のOddsHistoryItemをタイムスタンプでマージする */
+function mergeChartData(dataMap: Record<string, OddsHistoryItem[]>): MergedChartItem[] {
+  const allTs = [...new Set(
+    Object.values(dataMap).flatMap(items => items.map(i => i.detectedAt))
+  )].sort();
+  return allTs.map(ts => {
+    const item: MergedChartItem = { detectedAt: ts };
+    for (const [name, data] of Object.entries(dataMap)) {
+      const found = data.find(d => d.detectedAt === ts);
+      item[`${name}_win`]      = found?.winOdds      ?? null;
+      item[`${name}_placeMin`] = found?.placeOddsMin ?? null;
+      item[`${name}_placeMax`] = found?.placeOddsMax ?? null;
+    }
+    return item;
+  });
+}
+
 export default function OddsTrendChart() {
   const [urls, setUrls] = useState<{ url: string; raceName: string }[]>([]);
   const [selectedUrl, setSelectedUrl] = useState('');
 
   const [horses, setHorses] = useState<HorseOption[]>([]);
-  const [selectedHorse, setSelectedHorse] = useState('');
+  const [selectedHorses, setSelectedHorses] = useState<string[]>([]);
 
-  const [chartData, setChartData] = useState<OddsHistoryItem[] | null>(null);
-  const [alertMarkers, setAlertMarkers] = useState<AlertMarker[]>([]);
+  const [mergedChartData, setMergedChartData] = useState<MergedChartItem[] | null>(null);
+  const [alertMarkersMap, setAlertMarkersMap] = useState<Record<string, AlertMarker[]>>({});
   const [isLoadingUrls, setIsLoadingUrls] = useState(true);
   const [isLoadingHorses, setIsLoadingHorses] = useState(false);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
@@ -63,10 +82,8 @@ export default function OddsTrendChart() {
   /** URL選択時に馬一覧をカスケード取得 */
   const handleUrlChange = useCallback(async (url: string) => {
     setSelectedUrl(url);
-    setSelectedHorse('');
+    setSelectedHorses([]);
     setHorses([]);
-    setChartData(null);
-    setAlertMarkers([]);
     setErrorMessage(null);
 
     if (!url) return;
@@ -88,76 +105,98 @@ export default function OddsTrendChart() {
     }
   }, []);
 
-  /** グラフ表示ボタン押下時にオッズ時系列とアラートを取得 */
-  const handleShowChart = async () => {
-    if (!selectedUrl || !selectedHorse) return;
-
-    setIsLoadingChart(true);
-    setChartData(null);
-    setAlertMarkers([]);
-    setErrorMessage(null);
-
-    try {
-      const params = new URLSearchParams({ url: selectedUrl, horseName: selectedHorse });
-      const [oddsRes, alertsRes] = await Promise.all([
-        fetch(`/api/odds/history?${params}`),
-        fetch(`/api/odds/history/alerts?${params}`),
-      ]);
-      if (!oddsRes.ok) throw new Error(`オッズデータ取得失敗: ${oddsRes.status}`);
-
-      const data: OddsHistoryItem[] = await oddsRes.json();
-      if (data.length === 0) {
-        setErrorMessage('該当データがありません。シートのデータが削除されている可能性があります');
-        return;
-      }
-
-      // バックエンドがdetectedAt昇順でソート済みのため、そのままセット
-      setChartData(data);
-
-      // Alertsシートから取得済み（URL+馬名でサーバー側フィルタ済み）
-      if (alertsRes.ok) {
-        const alerts: AlertHistoryItem[] = await alertsRes.json();
-
-        // アラート時刻に最も近いchartDataのdetectedAtを探してマーカー位置とする
-        const markers: AlertMarker[] = alerts.map((a) => {
-          const alertMs = parseDataAt(a.detectedAt).getTime();
-          let nearest = data[0].detectedAt;
-          let minDiff = Infinity;
-          for (const item of data) {
-            const diff = Math.abs(parseDataAt(item.detectedAt).getTime() - alertMs);
-            if (diff < minDiff) {
-              minDiff = diff;
-              nearest = item.detectedAt;
-            }
-          }
-          return { x: nearest, type: a.alertType as AlertType, value: a.value };
-        });
-        setAlertMarkers(markers);
-      }
-    } catch (e) {
-      console.warn('オッズ時系列の取得に失敗しました', e);
-      setErrorMessage('データの取得に失敗しました');
-    } finally {
-      setIsLoadingChart(false);
+  /** チェックボックス変更時にオッズ時系列とアラートを自動取得 */
+  useEffect(() => {
+    if (!selectedUrl || selectedHorses.length === 0) {
+      setMergedChartData(null);
+      setAlertMarkersMap({});
+      return;
     }
-  };
+
+    let cancelled = false;
+
+    const fetchAll = async () => {
+      setIsLoadingChart(true);
+      setErrorMessage(null);
+
+      try {
+        const results = await Promise.all(
+          selectedHorses.map(horse =>
+            Promise.all([
+              fetch(`/api/odds/history?${new URLSearchParams({ url: selectedUrl, horseName: horse })}`),
+              fetch(`/api/odds/history/alerts?${new URLSearchParams({ url: selectedUrl, horseName: horse })}`),
+            ]) as Promise<[Response, Response]>
+          )
+        );
+
+        if (cancelled) return;
+
+        const dataMap: Record<string, OddsHistoryItem[]> = {};
+        const newAlertMarkersMap: Record<string, AlertMarker[]> = {};
+
+        for (let i = 0; i < selectedHorses.length; i++) {
+          const horseName = selectedHorses[i];
+          const [oddsRes, alertsRes] = results[i];
+
+          if (!oddsRes.ok) throw new Error(`オッズデータ取得失敗: ${oddsRes.status}`);
+          const data: OddsHistoryItem[] = await oddsRes.json();
+          if (data.length === 0) continue;
+          dataMap[horseName] = data;
+
+          if (alertsRes.ok) {
+            const alerts: AlertHistoryItem[] = await alertsRes.json();
+            const markers: AlertMarker[] = alerts.map((a) => {
+              const alertMs = parseDataAt(a.detectedAt).getTime();
+              let nearest = data[0].detectedAt;
+              let minDiff = Infinity;
+              for (const item of data) {
+                const diff = Math.abs(parseDataAt(item.detectedAt).getTime() - alertMs);
+                if (diff < minDiff) { minDiff = diff; nearest = item.detectedAt; }
+              }
+              return { x: nearest, type: a.alertType as AlertType, value: a.value };
+            });
+            newAlertMarkersMap[horseName] = markers;
+          }
+        }
+
+        if (cancelled) return;
+
+        if (Object.keys(dataMap).length === 0) {
+          setErrorMessage('該当データがありません。シートのデータが削除されている可能性があります');
+          return;
+        }
+
+        setMergedChartData(mergeChartData(dataMap));
+        setAlertMarkersMap(newAlertMarkersMap);
+      } catch (e) {
+        if (cancelled) return;
+        console.warn('オッズ時系列の取得に失敗しました', e);
+        setErrorMessage('データの取得に失敗しました');
+      } finally {
+        if (!cancelled) setIsLoadingChart(false);
+      }
+    };
+
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [selectedHorses, selectedUrl]);
 
   /** データが複数日にまたがるか */
-  const isMultiDay = chartData
-    ? new Set(chartData.map((item) => item.detectedAt.split(' ')[0])).size > 1
+  const isMultiDay = mergedChartData
+    ? new Set(mergedChartData.map(item => String(item.detectedAt).split(' ')[0])).size > 1
     : false;
 
   /** X軸ラベル: "yyyy/MM/dd HH:mm:ss" → 単日: "HH:mm" / 複数日: "M/d HH:mm" */
   const formatTime = (value: string) => {
     const parts = value.split(' ');
     if (parts.length < 2) return value;
-    const time = parts[1].slice(0, 5); // "HH:mm"
+    const time = parts[1].slice(0, 5);
     if (!isMultiDay) return time;
     const dateParts = parts[0].split('/');
     return `${parseInt(dateParts[1])}/${parseInt(dateParts[2])} ${time}`;
   };
 
-  const canShowChart = selectedUrl && selectedHorse && !isLoadingHorses;
+  const hasAlerts = Object.values(alertMarkersMap).flat().length > 0;
 
   return (
     <div>
@@ -184,67 +223,75 @@ export default function OddsTrendChart() {
         )}
       </div>
 
-      {/* 馬名選択 */}
+      {/* 馬名選択（チェックボックス） */}
       <div className="mb-4">
-        <label className="block text-xs font-medium text-gray-600 mb-1">馬名</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-xs font-medium text-gray-600">馬名</label>
+          {horses.length > 0 && (
+            <span className="text-xs text-gray-400">{selectedHorses.length}/{MAX_HORSES} 頭選択中</span>
+          )}
+        </div>
         {isLoadingHorses ? (
           <p className="text-xs text-gray-400">読み込み中...</p>
-        ) : (
-          <select
-            value={selectedHorse}
-            onChange={(e) => {
-              setSelectedHorse(e.target.value);
-              setChartData(null);
-              setAlertMarkers([]);
-              setErrorMessage(null);
-            }}
-            disabled={!selectedUrl || horses.length === 0}
-            className="w-full px-3 py-2 text-sm border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
-          >
-            <option value="">-- 馬を選択 --</option>
-            {horses.map((h) => (
-              <option key={h.horseNumber} value={h.horseName}>
-                {h.horseNumber}番 {h.horseName}
-              </option>
-            ))}
-          </select>
-        )}
+        ) : horses.length > 0 ? (
+          <div className="space-y-0.5 border border-gray-200 rounded-md px-2 py-1">
+            {horses.map((h) => {
+              const isChecked = selectedHorses.includes(h.horseName);
+              const isDisabled = !isChecked && selectedHorses.length >= MAX_HORSES;
+              return (
+                <label
+                  key={h.horseNumber}
+                  className={`flex items-center gap-2 px-1 py-1 rounded cursor-pointer text-sm
+                    ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}
+                    ${isChecked ? 'text-gray-900 font-medium' : 'text-gray-600'}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    disabled={isDisabled}
+                    onChange={() =>
+                      setSelectedHorses(prev =>
+                        prev.includes(h.horseName)
+                          ? prev.filter(n => n !== h.horseName)
+                          : [...prev, h.horseName]
+                      )
+                    }
+                    className="accent-blue-600"
+                  />
+                  {h.horseNumber}番 {h.horseName}
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
-
-      {/* グラフ表示ボタン */}
-      <button
-        onClick={handleShowChart}
-        disabled={!canShowChart || isLoadingChart}
-        className={`w-full py-2 px-4 rounded-md text-white text-sm font-medium transition-colors mb-4
-          ${canShowChart && !isLoadingChart
-            ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-            : 'bg-gray-400 cursor-not-allowed'
-          }`}
-      >
-        {isLoadingChart ? '取得中...' : 'グラフを表示'}
-      </button>
 
       {/* エラー・空データメッセージ */}
       {errorMessage && (
         <p className="text-sm text-gray-500 text-center py-4">{errorMessage}</p>
       )}
 
+      {/* ローディング */}
+      {isLoadingChart && (
+        <p className="text-sm text-gray-400 text-center py-4">取得中...</p>
+      )}
+
       {/* グラフ本体 */}
-      {chartData && chartData.length > 0 && (
+      {mergedChartData && mergedChartData.length > 0 && !isLoadingChart && (
         <div className="mt-2 space-y-6">
           <p className="text-xs text-gray-500 text-center">
-            {selectedHorse}（{chartData.length}件）
+            {selectedHorses.join('・')}（{mergedChartData.length}件）
           </p>
 
           {/* 単勝グラフ */}
           <div>
             <p className="text-xs font-medium text-gray-600 mb-1 text-center">単勝オッズ</p>
-            <ResponsiveContainer width="100%" aspect={2.5}>
-              <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" aspect={2.5} minWidth={1}>
+              <LineChart data={mergedChartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="detectedAt"
-                  tickFormatter={formatTime}
+                  tickFormatter={(v) => formatTime(String(v))}
                   tick={{ fontSize: 11, fill: '#6b7280' }}
                   angle={isMultiDay ? -35 : 0}
                   textAnchor={isMultiDay ? 'end' : 'middle'}
@@ -259,40 +306,44 @@ export default function OddsTrendChart() {
                   contentStyle={{ fontSize: 12 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line
-                  type="monotone"
-                  dataKey="winOdds"
-                  name="単勝"
-                  stroke="#2563eb"
-                  strokeWidth={2}
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  dot={(props: any) => {
-                    const { cx, cy, payload } = props;
-                    const marker = alertMarkers.find(m => m.x === payload.detectedAt);
-                    if (!marker || cy == null) return <g key={props.key} />;
-                    return (
-                      <circle
-                        key={props.key}
-                        cx={cx}
-                        cy={cy}
-                        r={5}
-                        fill={ALERT_COLORS[marker.type]}
-                        stroke="white"
-                        strokeWidth={1.5}
-                      />
-                    );
-                  }}
-                  connectNulls
-                />
+                {selectedHorses.map((name, i) => (
+                  <Line
+                    key={name}
+                    type="monotone"
+                    dataKey={`${name}_win`}
+                    name={name}
+                    stroke={HORSE_COLORS[i]}
+                    strokeWidth={2}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    dot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      const markers = alertMarkersMap[name] ?? [];
+                      const marker = markers.find(m => m.x === payload.detectedAt);
+                      if (!marker || cy == null) return <g key={props.key} />;
+                      return (
+                        <circle
+                          key={props.key}
+                          cx={cx}
+                          cy={cy}
+                          r={5}
+                          fill={ALERT_COLORS[marker.type]}
+                          stroke="white"
+                          strokeWidth={1.5}
+                        />
+                      );
+                    }}
+                    connectNulls
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
 
             {/* アラート凡例 */}
-            {alertMarkers.length > 0 && (
+            {hasAlerts && (
               <div className="flex flex-wrap gap-3 justify-center mt-1">
                 {(Object.keys(ALERT_COLORS) as AlertType[])
-                  .filter((type) => alertMarkers.some((m) => m.type === type))
-                  .map((type) => (
+                  .filter(type => Object.values(alertMarkersMap).flat().some(m => m.type === type))
+                  .map(type => (
                     <span key={type} className="flex items-center gap-1.5 text-xs text-gray-600">
                       <span
                         className="inline-block w-3 h-3 rounded-full border border-white"
@@ -308,12 +359,12 @@ export default function OddsTrendChart() {
           {/* 複勝グラフ */}
           <div>
             <p className="text-xs font-medium text-gray-600 mb-1 text-center">複勝オッズ</p>
-            <ResponsiveContainer width="100%" aspect={2.5}>
-              <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
+            <ResponsiveContainer width="100%" aspect={2.5} minWidth={1}>
+              <LineChart data={mergedChartData} margin={{ top: 8, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="detectedAt"
-                  tickFormatter={formatTime}
+                  tickFormatter={(v) => formatTime(String(v))}
                   tick={{ fontSize: 11, fill: '#6b7280' }}
                   angle={isMultiDay ? -35 : 0}
                   textAnchor={isMultiDay ? 'end' : 'middle'}
@@ -328,25 +379,30 @@ export default function OddsTrendChart() {
                   contentStyle={{ fontSize: 12 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line
-                  type="monotone"
-                  dataKey="placeOddsMin"
-                  name="複勝下限"
-                  stroke="#16a34a"
-                  strokeWidth={2}
-                  dot={false}
-                  connectNulls
-                />
-                <Line
-                  type="monotone"
-                  dataKey="placeOddsMax"
-                  name="複勝上限"
-                  stroke="#059669"
-                  strokeWidth={1.5}
-                  strokeDasharray="5 5"
-                  dot={false}
-                  connectNulls
-                />
+                {selectedHorses.map((name, i) => [
+                  <Line
+                    key={`${name}_min`}
+                    type="monotone"
+                    dataKey={`${name}_placeMin`}
+                    name={name}
+                    stroke={HORSE_COLORS[i]}
+                    strokeWidth={2}
+                    dot={false}
+                    connectNulls
+                  />,
+                  <Line
+                    key={`${name}_max`}
+                    type="monotone"
+                    dataKey={`${name}_placeMax`}
+                    name={`${name}_max`}
+                    legendType="none"
+                    stroke={HORSE_COLORS[i]}
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    connectNulls
+                  />,
+                ])}
               </LineChart>
             </ResponsiveContainer>
           </div>
