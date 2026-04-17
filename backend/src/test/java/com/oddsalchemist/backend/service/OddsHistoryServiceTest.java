@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -39,6 +40,38 @@ class OddsHistoryServiceTest {
     void setUp() {
         googleSheetsService = mock(GoogleSheetsService.class);
         service = new OddsHistoryService(googleSheetsService);
+    }
+
+    // ===== getUrlToRaceNameMap =====
+
+    @Test
+    void getUrlToRaceNameMap_URLとレース名が正しくマップされること() throws Exception {
+        when(googleSheetsService.readData("OddsData!A:H")).thenReturn(sampleRows);
+
+        Map<String, String> map = service.getUrlToRaceNameMap();
+
+        assertThat(map).containsEntry(URL_A, "テストレース");
+        assertThat(map).containsEntry(URL_B, "別レース");
+    }
+
+    @Test
+    void getUrlToRaceNameMap_同一URLが複数行ある場合は最初のレース名が返ること() throws Exception {
+        List<List<Object>> rows = List.of(
+                List.of("2026/03/19 10:00:00", URL_A, "最初のレース名", "1", "シンザン", "3.5", "1.5", "2.0"),
+                List.of("2026/03/19 10:05:00", URL_A, "上書きされない名前", "1", "シンザン", "3.3", "1.6", "2.1")
+        );
+        when(googleSheetsService.readData("OddsData!A:H")).thenReturn(rows);
+
+        Map<String, String> map = service.getUrlToRaceNameMap();
+
+        assertThat(map.get(URL_A)).isEqualTo("最初のレース名");
+    }
+
+    @Test
+    void getUrlToRaceNameMap_Sheets読み込み失敗時は空マップを返すこと() throws Exception {
+        when(googleSheetsService.readData("OddsData!A:H")).thenThrow(new IOException("API失敗"));
+
+        assertThat(service.getUrlToRaceNameMap()).isEmpty();
     }
 
     // ===== getUrls =====

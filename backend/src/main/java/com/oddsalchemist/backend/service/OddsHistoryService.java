@@ -8,7 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -25,6 +27,29 @@ public class OddsHistoryService {
 
     public OddsHistoryService(GoogleSheetsService googleSheetsService) {
         this.googleSheetsService = googleSheetsService;
+    }
+
+    /**
+     * OddsDataシートの B列(URL) と C列(レース名) から URL → レース名 のマップを返します。
+     * 同一 URL が複数行ある場合は最初に登場した行のレース名を使用します。
+     * Sheets 取得失敗時は WARN ログを出力して空マップを返します。
+     */
+    public Map<String, String> getUrlToRaceNameMap() {
+        try {
+            List<List<Object>> rows = googleSheetsService.readData(ODDS_DATA_RANGE);
+            return rows.stream()
+                    .filter(row -> row.size() > 2)
+                    .filter(row -> !row.get(1).toString().isBlank())
+                    .collect(Collectors.toMap(
+                            row -> row.get(1).toString(),
+                            row -> row.get(2).toString(),
+                            (existing, replacement) -> existing,
+                            LinkedHashMap::new
+                    ));
+        } catch (Exception e) {
+            logger.warn("OddsDataからレース名マップの取得に失敗しました: {}", e.getMessage());
+            return Map.of();
+        }
     }
 
     /**

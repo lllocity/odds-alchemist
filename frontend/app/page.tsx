@@ -174,7 +174,10 @@ export default function Home() {
                     className="flex items-start gap-2 text-xs text-gray-600 bg-gray-50 rounded px-3 py-2"
                   >
                     <div className="flex-1 min-w-0">
-                      <span className="block truncate text-gray-800">{info.url}</span>
+                      <span className="block font-medium text-gray-800">
+                        {info.raceName || '（レース名未取得）'}
+                      </span>
+                      <span className="block truncate text-gray-400 text-xs mt-0.5">{info.url}</span>
                       <div className="mt-1 flex gap-4 text-gray-400">
                         <span>最終実行: {info.lastExecutionTime ?? '未実行'}</span>
                         <span>次回予定: {info.nextScheduledTime ?? '未設定'}</span>

@@ -1,6 +1,8 @@
 package com.oddsalchemist.backend.controller;
 
+import com.oddsalchemist.backend.dto.TargetUrlResponseDto;
 import com.oddsalchemist.backend.scheduler.OddsScrapingScheduler;
+import com.oddsalchemist.backend.service.OddsHistoryService;
 import com.oddsalchemist.backend.service.OddsSyncService;
 import com.oddsalchemist.backend.service.TargetUrlStore;
 import org.slf4j.Logger;
@@ -10,8 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-
-import static com.oddsalchemist.backend.service.TargetUrlStore.TargetUrlInfo;
+import java.util.stream.Collectors;
 
 /**
  * 監視対象URLの動的登録・削除を提供するコントローラー。
@@ -28,22 +29,34 @@ public class OddsTargetsController {
     private final TargetUrlStore targetUrlStore;
     private final OddsSyncService oddsSyncService;
     private final OddsScrapingScheduler scheduler;
+    private final OddsHistoryService oddsHistoryService;
 
     public OddsTargetsController(TargetUrlStore targetUrlStore, OddsSyncService oddsSyncService,
-                                  OddsScrapingScheduler scheduler) {
+                                  OddsScrapingScheduler scheduler, OddsHistoryService oddsHistoryService) {
         this.targetUrlStore = targetUrlStore;
         this.oddsSyncService = oddsSyncService;
         this.scheduler = scheduler;
+        this.oddsHistoryService = oddsHistoryService;
     }
 
     /**
-     * 登録済みの監視対象URL一覧を実行時刻情報付きで返します。
+     * 登録済みの監視対象URL一覧をレース名・実行時刻情報付きで返します。
+     * レース名は OddsData シートから取得します（初回スクレイピング前は空文字）。
      *
-     * @return URLと実行時刻情報のリスト（JSON配列）
+     * @return URLとレース名・実行時刻情報のリスト（JSON配列）
      */
     @GetMapping("/targets")
-    public ResponseEntity<List<TargetUrlInfo>> getTargets() {
-        return ResponseEntity.ok(targetUrlStore.getUrlInfos());
+    public ResponseEntity<List<TargetUrlResponseDto>> getTargets() {
+        Map<String, String> raceNames = oddsHistoryService.getUrlToRaceNameMap();
+        List<TargetUrlResponseDto> response = targetUrlStore.getUrlInfos().stream()
+                .map(info -> new TargetUrlResponseDto(
+                        info.url(),
+                        raceNames.getOrDefault(info.url(), ""),
+                        info.lastExecutionTime(),
+                        info.nextScheduledTime()
+                ))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(response);
     }
 
     /**

@@ -26,7 +26,7 @@ function parseDataAt(s: string): Date {
 }
 
 export default function OddsTrendChart() {
-  const [urls, setUrls] = useState<string[]>([]);
+  const [urls, setUrls] = useState<{ url: string; raceName: string }[]>([]);
   const [selectedUrl, setSelectedUrl] = useState('');
 
   const [horses, setHorses] = useState<HorseOption[]>([]);
@@ -45,7 +45,7 @@ export default function OddsTrendChart() {
       try {
         const res = await fetch('/api/odds/history/urls');
         if (!res.ok) throw new Error(`URLリスト取得失敗: ${res.status}`);
-        const data: string[] = await res.json();
+        const data: { url: string; raceName: string }[] = await res.json();
         setUrls(data);
         if (data.length === 0) {
           setErrorMessage('OddsDataにデータがありません');
@@ -175,9 +175,9 @@ export default function OddsTrendChart() {
             className="w-full px-3 py-2 text-sm border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
           >
             <option value="">-- URLを選択 --</option>
-            {urls.map((url) => (
+            {urls.map(({ url, raceName }) => (
               <option key={url} value={url} title={url}>
-                {url.length > 60 ? `...${url.slice(-55)}` : url}
+                {raceName || `...${url.slice(-55)}`}
               </option>
             ))}
           </select>
