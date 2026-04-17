@@ -236,6 +236,20 @@ class OddsScrapingSchedulerTest {
     // ===== scrapeAndReschedule のテスト =====
 
     @Test
+    void scrapeAndReschedule_発走済みの場合はスクレイピングをスキップすること() throws Exception {
+        String url = "https://example.com/race/1";
+        // 発走時刻を1時間前に設定（発走済み）
+        LocalTime pastStart = LocalTime.now().minusHours(1);
+        when(oddsSyncService.getCachedStartTime(url)).thenReturn(Optional.of(pastStart));
+
+        OddsScrapingScheduler scheduler = new OddsScrapingScheduler(oddsSyncService, props, targetUrlStore);
+        scheduler.scrapeAndReschedule(url);
+
+        verify(oddsSyncService, never()).fetchAndSaveOdds(any(), any());
+        verify(targetUrlStore, never()).updateExecutionTimes(any(), any(), any());
+    }
+
+    @Test
     void scrapeAndReschedule_完了後にupdateExecutionTimesとpersistToSheetが呼ばれること() throws Exception {
         String url = "https://example.com/race/1";
         when(targetUrlStore.containsUrl(url)).thenReturn(true);

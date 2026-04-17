@@ -158,10 +158,20 @@ public class OddsScrapingScheduler {
 
     /**
      * 指定URLをスクレイピングし、完了後に次回スケジュールを登録します。
-     * URLがすでに削除されていた場合は再スケジュールしません。
+     * 発走時刻を過ぎている場合はスクレイピングをスキップし、再スケジュールしません。
+     * URLがすでに削除されていた場合も再スケジュールしません。
      * スクレイピング完了後に実行時刻を更新して Sheets へ永続化します。
      */
     void scrapeAndReschedule(String url) {
+        Optional<LocalTime> startTimeOpt = oddsSyncService.getCachedStartTime(url);
+        if (startTimeOpt.isPresent()) {
+            long minutesUntilStart = ChronoUnit.MINUTES.between(LocalTime.now(), startTimeOpt.get());
+            if (minutesUntilStart < 0) {
+                logger.info("発走済みのためスキップ: URL={}, 発走時刻={}", url, startTimeOpt.get().format(TIME_FORMATTER));
+                return;
+            }
+        }
+
         try {
             int saved = oddsSyncService.fetchAndSaveOdds(url, properties.sheetRange());
             logger.info("定期スクレイピング完了: URL={}, 保存件数={}", url, saved);
