@@ -163,9 +163,9 @@ export default function OddsTrendChart() {
     <div>
       <h2 className="text-base font-semibold text-gray-800 mb-4">オッズ推移グラフ</h2>
 
-      {/* レースURL選択 */}
+      {/* レース選択 */}
       <div className="mb-3">
-        <label className="block text-xs font-medium text-gray-600 mb-1">レースURL</label>
+        <label className="block text-xs font-medium text-gray-600 mb-1">レース名</label>
         {isLoadingUrls ? (
           <p className="text-xs text-gray-400">読み込み中...</p>
         ) : (
@@ -174,7 +174,7 @@ export default function OddsTrendChart() {
             onChange={(e) => handleUrlChange(e.target.value)}
             className="w-full px-3 py-2 text-sm border border-gray-300 text-gray-900 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
           >
-            <option value="">-- URLを選択 --</option>
+            <option value="">-- レースを選択 --</option>
             {urls.map(({ url, raceName }) => (
               <option key={url} value={url} title={url}>
                 {raceName || `...${url.slice(-55)}`}
