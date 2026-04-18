@@ -129,7 +129,7 @@ export default function Home() {
             </h2>
             <div className="mb-4 text-xs text-gray-400 border border-gray-100 rounded-md px-3 py-2 bg-gray-50 leading-relaxed">
               <span className="font-medium text-gray-500">取得間隔：</span>
-              午前中 / 発走後 → 30分　／　12時以降・発走60分超前 → 5分　／　発走60分前〜直前 → 1分
+              午前中 → 30分　／　12時以降・発走60分超前 → 5分　／　発走60分前〜直前 → 1分
             </div>
 
             <form onSubmit={handleRegisterUrl} className="flex gap-2 mb-3">
