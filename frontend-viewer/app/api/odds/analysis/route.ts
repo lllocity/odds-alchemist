@@ -80,8 +80,11 @@ function buildHorsesData(oddsRows: string[][], url: string, alertRows: string[][
 
     const lines: string[] = [
       `【${horse.number}番 ${horse.name}】`,
-      '時刻,単勝,複勝下限,複勝上限,累積変化率,前回比',
+      '時刻,単勝,複勝下限,複勝上限,単勝変化率,単勝前回比,複勝前回比',
     ];
+
+    const placeVelocities: (number | null)[] = [];
+    let prevPlaceMin: number | null = null;
 
     for (const r of dataRows) {
       const cumRate =
@@ -90,22 +93,29 @@ function buildHorsesData(oddsRows: string[][], url: string, alertRows: string[][
           : '-';
       const velocity = r.winOdds !== null && prevWin !== null ? r.winOdds - prevWin : null;
       velocities.push(velocity);
+      const placeVelocity = r.placeMin !== null && prevPlaceMin !== null ? r.placeMin - prevPlaceMin : null;
+      placeVelocities.push(placeVelocity);
 
       const velStr = velocity !== null ? velocity.toFixed(1) : '-';
+      const placeVelStr = placeVelocity !== null ? placeVelocity.toFixed(1) : '-';
       const alertMatch = alerts.find(a => a.time === r.time);
       const alertSuffix = alertMatch ? ` *${alertMatch.type}` : '';
 
       lines.push(
-        `${r.time},${r.winOdds?.toFixed(1) ?? '-'},${r.placeMin?.toFixed(1) ?? '-'},${r.placeMax?.toFixed(1) ?? '-'},${cumRate},${velStr}${alertSuffix}`
+        `${r.time},${r.winOdds?.toFixed(1) ?? '-'},${r.placeMin?.toFixed(1) ?? '-'},${r.placeMax?.toFixed(1) ?? '-'},${cumRate},${velStr},${placeVelStr}${alertSuffix}`
       );
       if (r.winOdds !== null) prevWin = r.winOdds;
+      if (r.placeMin !== null) prevPlaceMin = r.placeMin;
     }
 
     const trend = classifyTrend(velocities);
     const last5valid = velocities.filter((v): v is number => v !== null).slice(-5);
     const last5sum =
       last5valid.length > 0 ? last5valid.reduce((a, b) => a + b, 0).toFixed(1) : '-';
-    lines.push(`▶ トレンド: ${trend} | 最終5件変化: ${last5sum}`);
+    const last5placeValid = placeVelocities.filter((v): v is number => v !== null).slice(-5);
+    const last5placeSum =
+      last5placeValid.length > 0 ? last5placeValid.reduce((a, b) => a + b, 0).toFixed(1) : '-';
+    lines.push(`▶ 単勝トレンド: ${trend} | 単勝最終5件変化: ${last5sum} | 複勝前回比合計: ${last5placeSum}`);
 
     parts.push(lines.join('\n'));
   }
@@ -153,8 +163,9 @@ export async function GET(req: NextRequest) {
 ## データの見方
 - 単勝オッズ: 1着的中時の払戻倍率。数値が低いほど支持率が高い（人気馬）
 - 複勝オッズ（下限〜上限）: 3着以内的中時の払戻倍率の範囲
-- 累積変化率: 最初の取得値を基準とした単勝オッズの変化率（マイナス＝下落＝支持増）
-- 前回比: 前回取得値との差（マイナス＝下落＝支持増）
+- 単勝変化率: 最初の取得値を基準とした単勝オッズの変化率（マイナス＝下落＝支持増）
+- 単勝前回比: 前回取得値との単勝オッズの差（マイナス＝下落＝支持増）
+- 複勝前回比: 前回取得値との複勝下限の差（マイナス＝下落＝3着以内の支持増）
 - 「*」マーク: その時点でアラートが発生していることを示す
 - ▶ トレンド行: 直近5件の動向分類と合計変化量
 
@@ -176,6 +187,12 @@ verdict の定義:
 - 高オッズ（30倍以上）＋弱いトレンド → 消し
 
 ※「トレンドが下落している」だけで本命にしないこと。150倍→100倍への下落は「下落トレンド」だが依然として市場の評価は低く、複数の強い根拠が必要。
+
+複勝推移との組み合わせ:
+- 単勝下落 + 複勝も下落 → 本命の信頼度UP（市場全体で評価）
+- 単勝横ばい/高い + 複勝下落 → 対抗として優先評価（「飛ぶよりは来る」）
+- 単勝上昇 + 複勝上昇 → 消し（複合的な人気離れシグナル）
+- 単勝高い + 複勝のみ下落 → 3着紐として評価
 
 ## アラートの種類（いずれも買いの根拠として使うべきシグナル）
 - 支持率急増: 短時間で単勝オッズが大幅に下落（急激な人気集中）→ 資金流入の強いシグナル
@@ -219,7 +236,12 @@ ${alertsData}
    - 早期からの継続下落：安定したファン・専門家の支持
    - 直前（最終数点）での急変：当日の状態・情報に基づく可能性が高く重要
 
-6. 複勝との乖離
+6. 複勝推移の活用（対抗・3着紐の判断に直結）
+   - 単勝・複勝ともに下落中 → 本命候補の信頼度UP（市場全体が支持）
+   - 複勝だけが緩やかに下落し、単勝は横ばい/高水準 → 対抗候補（「飛ぶよりは来る」という市場評価。2着以内での買いが有効）
+   - 単勝が下落中で複勝は横ばい → 勝ち切りに期待される馬（本命寄りで評価）
+   - 単勝・複勝ともに上昇中 → 消し候補（人気離れの複合シグナル）
+   - 単勝は高いが複勝だけ下落 → 3着紐候補（単勝人気は低いが3着以内は評価されている穴馬）
    - 単勝人気と複勝人気が著しくずれている馬は穴人気の可能性
 
 7. アラートの活用（重要）
