@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type HorseAnalysis = {
   number: number;
@@ -26,10 +26,18 @@ const VERDICT_STYLES: Record<string, string> = {
 };
 
 export default function OddsAnalysis({ url }: { url: string }) {
+  const [cache, setCache] = useState<Map<string, AnalysisResult>>(new Map());
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openEvidence, setOpenEvidence] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    setResult(cache.get(url) ?? null);
+    setError(null);
+    setOpenEvidence(new Set());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url]);
 
   const handleAnalyze = async () => {
     setIsLoading(true);
@@ -43,6 +51,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
         throw new Error((body as { error?: string }).error ?? `エラー: ${res.status}`);
       }
       const data: AnalysisResult = await res.json();
+      setCache(prev => new Map(prev).set(url, data));
       setResult(data);
     } catch (e) {
       console.warn('AI分析の取得に失敗しました', e);
@@ -67,7 +76,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
         <h2 className="text-base font-semibold text-gray-800">AI オッズ分析</h2>
         <button
           onClick={handleAnalyze}
-          disabled={isLoading}
+          disabled={isLoading || cache.has(url)}
           className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isLoading ? '分析中...' : 'AI分析を実行'}
@@ -79,7 +88,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
       )}
 
       {isLoading && (
-        <p className="text-sm text-gray-400 text-center py-6">Gemini が分析しています... (最大30秒)</p>
+        <p className="text-sm text-gray-400 text-center py-6">Gemini が分析しています... しばらくお待ちください</p>
       )}
 
       {result && (
