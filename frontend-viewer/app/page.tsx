@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { signOut } from 'next-auth/react';
 import AlertList from '@/app/components/AlertList';
 import OddsTrendChart from '@/app/components/OddsTrendChart';
+import OddsAnalysis from '@/app/components/OddsAnalysis';
 import { AnomalyAlert } from '@/app/types/oddsAlert';
 
 /** アラートをポーリングする間隔（ミリ秒）: スクレイピング最短間隔1分に対し10秒で追従 */
@@ -12,6 +13,7 @@ const POLLING_INTERVAL_MS = 10_000;
 export default function Home() {
   const [alerts, setAlerts] = useState<AnomalyAlert[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [selectedUrl, setSelectedUrl] = useState('');
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -61,11 +63,11 @@ export default function Home() {
             {/* 左カラム: オッズ推移グラフ */}
             <div className="space-y-6">
               <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
-                <OddsTrendChart />
+                <OddsTrendChart onUrlChange={setSelectedUrl} />
               </div>
             </div>
 
-            {/* 右カラム: 買いの掟 + 検知アラート */}
+            {/* 右カラム: 買いの掟 + AI分析 + 検知アラート */}
             <div className="space-y-4 sm:sticky sm:top-6">
 
               {/* 買いの掟 */}
@@ -86,6 +88,9 @@ export default function Home() {
                   </li>
                 </ul>
               </div>
+
+              {/* AI オッズ分析（レース選択後に表示） */}
+              {selectedUrl && <OddsAnalysis url={selectedUrl} />}
 
               {/* 検知アラート */}
               <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">

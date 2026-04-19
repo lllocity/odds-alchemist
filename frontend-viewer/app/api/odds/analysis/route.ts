@@ -1,0 +1,244 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getOddsData, getAlerts } from '@/lib/sheets';
+
+export const maxDuration = 30;
+
+function toFloat(s: string | undefined): number | null {
+  if (!s) return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+/** 直近5件の前回比から推移トレンドを分類する */
+function classifyTrend(velocities: (number | null)[]): string {
+  const valid = velocities.filter((v): v is number => v !== null);
+  if (valid.length === 0) return '横ばい';
+  const last5 = valid.slice(-5);
+  const sum5 = last5.reduce((a, b) => a + b, 0);
+  const negCount = last5.filter(v => v < 0).length;
+  const minV = Math.min(...last5);
+
+  if (minV <= -2.0) return '急落';
+  if (sum5 <= -0.5 && negCount >= 3) return '継続下落中';
+  if (sum5 >= 0.3) {
+    const allSum = valid.reduce((a, b) => a + b, 0);
+    return allSum < -0.5 ? '反発中' : '上昇中';
+  }
+  if (valid.length > 5) {
+    const earlier = valid.slice(0, -5);
+    const earlierSum = earlier.reduce((a, b) => a + b, 0);
+    if (earlierSum < -0.5 && Math.abs(sum5) < 0.3) return '下落後安定';
+  }
+  return '横ばい';
+}
+
+function buildHorsesData(oddsRows: string[][], url: string, alertRows: string[][]): string {
+  type HorseRow = { time: string; winOdds: number | null; placeMin: number | null; placeMax: number | null };
+  const horseMap = new Map<string, { number: string; name: string; rows: HorseRow[] }>();
+
+  for (const row of oddsRows) {
+    const [detectedAt, rowUrl, , horseNum, horseName, win, placeMin, placeMax] = row;
+    if (rowUrl !== url) continue;
+    const key = `${horseNum}:${horseName}`;
+    if (!horseMap.has(key)) {
+      horseMap.set(key, { number: horseNum ?? '', name: horseName ?? '', rows: [] });
+    }
+    const timePart = detectedAt?.split(' ')[1]?.slice(0, 5) ?? detectedAt ?? '';
+    horseMap.get(key)!.rows.push({
+      time: timePart,
+      winOdds: toFloat(win),
+      placeMin: toFloat(placeMin),
+      placeMax: toFloat(placeMax),
+    });
+  }
+
+  type AlertEntry = { time: string; type: string };
+  const alertMap = new Map<string, AlertEntry[]>();
+  for (const row of alertRows) {
+    const [detectedAt, rowUrl, , horseNum, horseName, alertType] = row;
+    if (rowUrl !== url) continue;
+    const key = `${horseNum}:${horseName}`;
+    if (!alertMap.has(key)) alertMap.set(key, []);
+    const timePart = detectedAt?.split(' ')[1]?.slice(0, 5) ?? detectedAt ?? '';
+    alertMap.get(key)!.push({ time: timePart, type: alertType ?? '' });
+  }
+
+  const sorted = [...horseMap.entries()].sort(
+    (a, b) => parseInt(a[1].number) - parseInt(b[1].number)
+  );
+
+  const parts: string[] = [];
+
+  for (const [key, horse] of sorted) {
+    const dataRows = horse.rows.slice(-20);
+    const firstWin = dataRows.find(r => r.winOdds !== null)?.winOdds ?? null;
+    const alerts = alertMap.get(key) ?? [];
+
+    const velocities: (number | null)[] = [];
+    let prevWin: number | null = null;
+
+    const lines: string[] = [
+      `【${horse.number}番 ${horse.name}】`,
+      '時刻,単勝,複勝下限,複勝上限,累積変化率,前回比',
+    ];
+
+    for (const r of dataRows) {
+      const cumRate =
+        firstWin !== null && r.winOdds !== null
+          ? `${(((r.winOdds - firstWin) / firstWin) * 100).toFixed(1)}%`
+          : '-';
+      const velocity = r.winOdds !== null && prevWin !== null ? r.winOdds - prevWin : null;
+      velocities.push(velocity);
+
+      const velStr = velocity !== null ? velocity.toFixed(1) : '-';
+      const alertMatch = alerts.find(a => a.time === r.time);
+      const alertSuffix = alertMatch ? ` *${alertMatch.type}` : '';
+
+      lines.push(
+        `${r.time},${r.winOdds?.toFixed(1) ?? '-'},${r.placeMin?.toFixed(1) ?? '-'},${r.placeMax?.toFixed(1) ?? '-'},${cumRate},${velStr}${alertSuffix}`
+      );
+      if (r.winOdds !== null) prevWin = r.winOdds;
+    }
+
+    const trend = classifyTrend(velocities);
+    const last5valid = velocities.filter((v): v is number => v !== null).slice(-5);
+    const last5sum =
+      last5valid.length > 0 ? last5valid.reduce((a, b) => a + b, 0).toFixed(1) : '-';
+    lines.push(`▶ トレンド: ${trend} | 最終5件変化: ${last5sum}`);
+
+    parts.push(lines.join('\n'));
+  }
+
+  return parts.join('\n\n');
+}
+
+function buildAlertsData(alertRows: string[][], url: string): string {
+  const relevant = alertRows.filter(row => row[1] === url);
+  if (relevant.length === 0) return 'なし';
+  return relevant
+    .map(row => {
+      const [detectedAt, , , horseNum, horseName, alertType, value] = row;
+      const timePart = detectedAt?.split(' ')[1]?.slice(0, 5) ?? detectedAt ?? '';
+      return `- ${timePart} ${horseNum}番 ${horseName}：${alertType}（値:${value}）`;
+    })
+    .join('\n');
+}
+
+export async function GET(req: NextRequest) {
+  const url = req.nextUrl.searchParams.get('url');
+  if (!url) {
+    return NextResponse.json({ error: 'url パラメータが必要です' }, { status: 400 });
+  }
+
+  try {
+    const [oddsRows, alertRows] = await Promise.all([getOddsData(), getAlerts()]);
+
+    const urlRows = oddsRows.filter(row => row[1] === url);
+    if (urlRows.length === 0) {
+      return NextResponse.json({ error: '指定されたURLのデータが見つかりません' }, { status: 404 });
+    }
+
+    const raceName = urlRows[0][2] ?? url;
+    const horsesData = buildHorsesData(oddsRows, url, alertRows);
+    const alertsData = buildAlertsData(alertRows, url);
+
+    const systemPrompt = `あなたは日本の競馬のオッズ動向を分析する専門家です。
+提供されるデータは一般公開されていない「オッズ推移（時系列）」であり、最新オッズだけでは見えない市場の意図や資金の流れが記録されています。
+「現時点のオッズ水準」ではなく「どのように変化してきたか（軌跡）」を重視して分析してください。
+回答は指示されたJSON形式のみを出力してください。前置き・後書き・解説文は一切不要です。`;
+
+    const userPrompt = `以下は【${raceName}】のオッズ推移データです。
+
+## データの見方
+- 単勝オッズ: 1着的中時の払戻倍率。数値が低いほど支持率が高い（人気馬）
+- 複勝オッズ（下限〜上限）: 3着以内的中時の払戻倍率の範囲
+- 累積変化率: 最初の取得値を基準とした単勝オッズの変化率（マイナス＝下落＝支持増）
+- 前回比: 前回取得値との差（マイナス＝下落＝支持増）
+- 「*」マーク: その時点でアラートが発生していることを示す
+- ▶ トレンド行: 直近5件の動向分類と合計変化量
+
+## アラートの種類
+- 支持率急増: 短時間で単勝オッズが大幅に下落した（急激な人気集中）
+- 順位乖離: 単勝人気順位と複勝人気順位が大きくずれている（穴人気の可能性）
+- トレンド逸脱: オッズ推移が通常のパターンから外れた動きをしている
+
+## 各馬のオッズ推移
+
+${horsesData}
+
+## アラート履歴
+
+${alertsData}
+※ アラートが無い場合は「なし」
+
+## 分析指示
+上記データから、オッズの推移軌跡・モメンタム・馬間の資金移動を多角的に分析し、以下のJSON形式で出力してください。
+
+【判断のロジック】〈このデータ固有の優位性を活かす6つの観点〉
+
+1. トレンド形状（最重要）
+   - 継続下落中：市場が継続的に支持を積み上げている → 最有力シグナル
+   - 急落後安定：一時的な大口資金の可能性あり。安定継続なら信頼できる
+   - 反発中（下落→上昇）：一度集まった支持が離れた。要注意
+   - 直前急落：発走直前の情報流入の可能性。データ後半の動きほど重要
+
+2. モメンタム（加速・減速）
+   - 前回比列を参照し、下落が加速しているか減速・停止しているか判断する
+   - 直近で加速中：市場の確信が強まっている
+   - 直近で減速・横ばい：支持がピークアウトした可能性
+
+3. 支持の安定性
+   - 推移が一方向に単調：市場コンセンサスが明確（信頼性高）
+   - 推移が上下にノイジー：投機的・不安定（信頼性低）
+
+4. 馬間の連動性
+   - ある馬のオッズが下がる時間帯に別の馬が上がっていないか確認する
+   - 連動している場合は資金移動が起きており、受け皿側の馬に注目
+
+5. 変化のタイミング
+   - 早期からの継続下落：安定したファン・専門家の支持
+   - 直前（最終数点）での急変：当日の状態・情報に基づく可能性が高く重要
+
+6. 複勝との乖離
+   - 単勝人気と複勝人気が著しくずれている馬は穴人気の可能性
+
+【重要】データに含まれる全馬について horses 配列にエントリを作成すること。
+「消し」と判断した馬であっても、なぜ消してよいかの根拠を trend_evidence に記載すること。
+データが少ない馬は verdict を "注目" とし、その旨を comment に明記すること。
+
+必ず以下のJSON構造のみを出力し、余計な解説文は一切含めないでください。
+
+{
+  "horses": [
+    {
+      "number": 馬番(数値),
+      "name": "馬名",
+      "verdict": "本命" または "対抗" または "紐候補" または "注目" または "消し",
+      "comment": "推移の観点から見たこの馬の評価と買い目における位置づけを2〜4文で。紐に入れるべきか・外してよいか・軸とすべきかを明示すること",
+      "trend_evidence": "具体的な推移データの根拠を3〜5文で。時刻・数値・前回比・他馬との連動性を交えて記述すること"
+    }
+  ],
+  "trend_summary": "レース全体で観察された資金フロー・トレンドの転換点・市場コンセンサスの強弱を3〜5文で詳述。具体的な時刻・馬番・数値を使い抽象的な表現は避けること",
+  "summary": "全体所感と今回の買い目戦略の方向性を2〜3文で",
+  "confidence_score": データの充実度と動向の明確さから判断した推奨確度(1-100の整数)
+}
+
+根拠が薄い・データ不足の場合は trend_evidence と trend_summary にその旨を明記してください。`;
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-pro',
+      systemInstruction: systemPrompt,
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+
+    const result = await model.generateContent(userPrompt);
+    const text = result.response.text();
+    const parsed = JSON.parse(text);
+    return NextResponse.json(parsed);
+  } catch (e) {
+    console.warn('AI分析に失敗しました', e);
+    return NextResponse.json({ error: 'AI分析に失敗しました' }, { status: 500 });
+  }
+}

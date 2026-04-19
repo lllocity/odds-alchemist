@@ -44,7 +44,7 @@ function mergeChartData(dataMap: Record<string, OddsHistoryItem[]>): MergedChart
   });
 }
 
-export default function OddsTrendChart() {
+export default function OddsTrendChart({ onUrlChange }: { onUrlChange?: (url: string) => void }) {
   const [urls, setUrls] = useState<{ url: string; raceName: string }[]>([]);
   const [selectedUrl, setSelectedUrl] = useState('');
 
@@ -82,6 +82,7 @@ export default function OddsTrendChart() {
   /** URL選択時に馬一覧をカスケード取得 */
   const handleUrlChange = useCallback(async (url: string) => {
     setSelectedUrl(url);
+    onUrlChange?.(url);
     setSelectedHorses([]);
     setHorses([]);
     setErrorMessage(null);
