@@ -26,8 +26,10 @@ const VERDICT_STYLES: Record<string, string> = {
 
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
+type CacheEntry = { result: AnalysisResult; analyzedAt: Date; elapsedMs: number };
+
 export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; onAnalyzingChange?: (v: boolean) => void }) {
-  const [cache, setCache] = useState<Map<string, AnalysisResult>>(new Map());
+  const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map());
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +38,11 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
   const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
 
   useEffect(() => {
-    setResult(cache.get(url) ?? null);
+    const entry = cache.get(url) ?? null;
+    setResult(entry?.result ?? null);
+    setElapsedMs(entry?.elapsedMs ?? null);
+    setAnalyzedAt(entry?.analyzedAt ?? null);
     setError(null);
-    setElapsedMs(null);
-    setAnalyzedAt(null);
     setOpenEvidence(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
@@ -60,9 +63,11 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
         throw new Error((body as { error?: string }).error ?? `エラー: ${res.status}`);
       }
       const data: AnalysisResult = await res.json();
-      setElapsedMs(Date.now() - startedAt);
-      setAnalyzedAt(new Date());
-      setCache(prev => new Map(prev).set(url, data));
+      const elapsed = Date.now() - startedAt;
+      const at = new Date();
+      setElapsedMs(elapsed);
+      setAnalyzedAt(at);
+      setCache(prev => new Map(prev).set(url, { result: data, analyzedAt: at, elapsedMs: elapsed }));
       setResult(data);
     } catch (e) {
       console.warn('AI分析の取得に失敗しました', e);
