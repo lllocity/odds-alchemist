@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 type HorseAnalysis = {
   number: number;
   name: string;
-  verdict: '本命' | '対抗' | '紐候補' | '注目' | '消し';
+  verdict: '本命' | '対抗' | '2着候補' | '3着紐' | '注目' | '消し';
   comment: string;
   trend_evidence: string;
 };
@@ -20,7 +20,8 @@ type AnalysisResult = {
 const VERDICT_STYLES: Record<string, string> = {
   '本命': 'bg-red-100 text-red-800 border border-red-200',
   '対抗': 'bg-orange-100 text-orange-800 border border-orange-200',
-  '紐候補': 'bg-blue-100 text-blue-800 border border-blue-200',
+  '2着候補': 'bg-purple-100 text-purple-800 border border-purple-200',
+  '3着紐': 'bg-blue-100 text-blue-800 border border-blue-200',
   '注目': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
   '消し': 'bg-gray-100 text-gray-400 border border-gray-200',
 };
