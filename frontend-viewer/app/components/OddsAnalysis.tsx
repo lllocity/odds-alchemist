@@ -28,6 +28,27 @@ const GEMINI_MODEL = 'gemini-2.5-flash';
 
 type CacheEntry = { result: AnalysisResult; analyzedAt: Date; elapsedMs: number };
 
+function buildBets(horses: HorseAnalysis[]) {
+  const honmei = horses.filter(h => h.verdict === '本命');
+  const taikou = horses.filter(h => h.verdict === '対抗');
+  const himo   = horses.filter(h => h.verdict === '3着紐');
+  if (honmei.length === 0 || taikou.length === 0) return null;
+
+  // 馬単: 本命→対抗 と 対抗→本命 の全組み合わせ
+  const umatanPairs: [HorseAnalysis, HorseAnalysis][] = [];
+  for (const h1 of honmei) for (const h2 of taikou) {
+    umatanPairs.push([h1, h2]);
+    umatanPairs.push([h2, h1]);
+  }
+  const umatanCount = umatanPairs.length;
+
+  // 3連単: 馬単ペア × 各紐（3着流し）
+  const sanrentanCount = umatanCount * himo.length;
+  const total = umatanCount + sanrentanCount;
+
+  return { honmei, taikou, himo, umatanPairs, umatanCount, sanrentanCount, total };
+}
+
 export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; onAnalyzingChange?: (v: boolean) => void }) {
   const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map());
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -162,6 +183,55 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
               </div>
             ))}
           </div>
+
+          {/* 買い目推奨 */}
+          {(() => {
+            const bets = buildBets(result.horses);
+            if (!bets) return null;
+            const { himo, umatanPairs, umatanCount, sanrentanCount, total } = bets;
+            return (
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                  <p className="text-xs font-bold text-gray-700">買い目推奨</p>
+                  <p className={`text-xs font-bold ${total > 30 ? 'text-red-600' : 'text-gray-600'}`}>
+                    {total > 30 ? `⚠ 合計 ${total} 口（30口超）` : `合計 ${total} 口`}
+                  </p>
+                </div>
+
+                {/* 馬単 */}
+                <div className="px-3 py-2 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-600 mb-1">馬単（{umatanCount}口）</p>
+                  <div className="space-y-0.5">
+                    {umatanPairs.map(([first, second], i) => (
+                      <p key={i} className="text-xs text-gray-700">
+                        {first.number}番 {first.name} → {second.number}番 {second.name}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3連単 */}
+                {himo.length > 0 && (
+                  <div className="px-3 py-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">3連単（{sanrentanCount}口）</p>
+                    <div className="space-y-1">
+                      {umatanPairs.map(([first, second], i) => (
+                        <p key={i} className="text-xs text-gray-700">
+                          <span className="font-medium">{first.number}番→{second.number}番</span>
+                          {' → '}
+                          {himo.map(h => `${h.number}番`).join('・')}
+                          <span className="text-gray-400">（{himo.length}口）</span>
+                        </p>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      3着: {himo.map(h => `${h.number}番 ${h.name}`).join(' / ')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* 全体所感 */}
           <div className="bg-gray-50 rounded-lg p-3">
