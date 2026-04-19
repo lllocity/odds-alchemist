@@ -280,7 +280,11 @@ ${alertsData}
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       systemInstruction: systemPrompt,
-      generationConfig: { responseMimeType: 'application/json' },
+      generationConfig: {
+        responseMimeType: 'application/json',
+        // @ts-expect-error thinkingConfig は SDK 型定義未反映だが API はサポート済み
+        thinkingConfig: { thinkingBudget: 1024 },
+      },
     });
 
     const result = await model.generateContent(userPrompt);
