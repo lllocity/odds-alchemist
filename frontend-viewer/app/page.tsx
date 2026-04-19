@@ -14,6 +14,7 @@ export default function Home() {
   const [alerts, setAlerts] = useState<AnomalyAlert[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [selectedUrl, setSelectedUrl] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -63,7 +64,7 @@ export default function Home() {
             {/* 左カラム: オッズ推移グラフ */}
             <div className="space-y-6">
               <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
-                <OddsTrendChart onUrlChange={setSelectedUrl} />
+                <OddsTrendChart onUrlChange={setSelectedUrl} disabled={isAnalyzing} />
               </div>
             </div>
 
@@ -90,7 +91,7 @@ export default function Home() {
               </div>
 
               {/* AI オッズ分析（レース選択後に表示） */}
-              {selectedUrl && <OddsAnalysis url={selectedUrl} />}
+              {selectedUrl && <OddsAnalysis url={selectedUrl} onAnalyzingChange={setIsAnalyzing} />}
 
               {/* 検知アラート */}
               <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">

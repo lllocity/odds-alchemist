@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 type HorseAnalysis = {
   number: number;
   name: string;
-  verdict: '1着候補' | '2着候補' | '3着紐' | '注目' | '消し';
+  verdict: '本命' | '対抗' | '3着紐' | '消し';
   comment: string;
   trend_evidence: string;
 };
@@ -18,34 +18,39 @@ type AnalysisResult = {
 };
 
 const VERDICT_STYLES: Record<string, string> = {
-  '1着候補': 'bg-red-100 text-red-800 border border-red-200',
-  '2着候補': 'bg-orange-100 text-orange-800 border border-orange-200',
+  '本命': 'bg-red-100 text-red-800 border border-red-200',
+  '対抗': 'bg-orange-100 text-orange-800 border border-orange-200',
   '3着紐': 'bg-blue-100 text-blue-800 border border-blue-200',
-  '注目': 'bg-yellow-100 text-yellow-800 border border-yellow-200',
   '消し': 'bg-gray-100 text-gray-400 border border-gray-200',
 };
 
-export default function OddsAnalysis({ url }: { url: string }) {
+const GEMINI_MODEL = 'gemini-2.5-flash';
+
+export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; onAnalyzingChange?: (v: boolean) => void }) {
   const [cache, setCache] = useState<Map<string, AnalysisResult>>(new Map());
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openEvidence, setOpenEvidence] = useState<Set<number>>(new Set());
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     setResult(cache.get(url) ?? null);
     setError(null);
     setElapsedMs(null);
+    setAnalyzedAt(null);
     setOpenEvidence(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
   const handleAnalyze = async () => {
     setIsLoading(true);
+    onAnalyzingChange?.(true);
     setError(null);
     setResult(null);
     setElapsedMs(null);
+    setAnalyzedAt(null);
     setOpenEvidence(new Set());
     const startedAt = Date.now();
     try {
@@ -56,6 +61,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
       }
       const data: AnalysisResult = await res.json();
       setElapsedMs(Date.now() - startedAt);
+      setAnalyzedAt(new Date());
       setCache(prev => new Map(prev).set(url, data));
       setResult(data);
     } catch (e) {
@@ -63,6 +69,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
       setError(e instanceof Error ? e.message : 'AI分析に失敗しました');
     } finally {
       setIsLoading(false);
+      onAnalyzingChange?.(false);
     }
   };
 
@@ -87,9 +94,12 @@ export default function OddsAnalysis({ url }: { url: string }) {
           {isLoading ? '分析中...' : 'AI分析を実行'}
         </button>
       </div>
-      <div className="flex items-center justify-end gap-3 mb-3 min-h-[1.25rem]">
-        {elapsedMs !== null && (
-          <p className="text-xs text-gray-400">取得時間: {(elapsedMs / 1000).toFixed(1)}秒</p>
+      <div className="flex flex-col items-end gap-0.5 mb-3 min-h-[1.25rem]">
+        {analyzedAt && (
+          <p className="text-xs text-gray-400">
+            {analyzedAt.toLocaleString('ja-JP')} 取得 / モデル: {GEMINI_MODEL}
+            {elapsedMs !== null && `（${(elapsedMs / 1000).toFixed(1)}秒）`}
+          </p>
         )}
         {cache.has(url) && !isLoading && (
           <p className="text-xs text-gray-400">再度分析する際は画面をリロードしてください</p>
