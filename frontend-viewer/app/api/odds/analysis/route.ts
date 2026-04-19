@@ -230,7 +230,12 @@ ${alertsData}
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       systemInstruction: systemPrompt,
-      generationConfig: { responseMimeType: 'application/json' },
+      generationConfig: {
+        responseMimeType: 'application/json',
+        // Thinking を無効化して応答を高速化
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        thinkingConfig: { thinkingBudget: 0 } as any,
+      },
     });
 
     const result = await model.generateContent(userPrompt);
