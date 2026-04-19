@@ -31,10 +31,12 @@ export default function OddsAnalysis({ url }: { url: string }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openEvidence, setOpenEvidence] = useState<Set<number>>(new Set());
+  const [elapsedMs, setElapsedMs] = useState<number | null>(null);
 
   useEffect(() => {
     setResult(cache.get(url) ?? null);
     setError(null);
+    setElapsedMs(null);
     setOpenEvidence(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
@@ -43,7 +45,9 @@ export default function OddsAnalysis({ url }: { url: string }) {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setElapsedMs(null);
     setOpenEvidence(new Set());
+    const startedAt = Date.now();
     try {
       const res = await fetch(`/api/odds/analysis?url=${encodeURIComponent(url)}`);
       if (!res.ok) {
@@ -51,6 +55,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
         throw new Error((body as { error?: string }).error ?? `エラー: ${res.status}`);
       }
       const data: AnalysisResult = await res.json();
+      setElapsedMs(Date.now() - startedAt);
       setCache(prev => new Map(prev).set(url, data));
       setResult(data);
     } catch (e) {
@@ -72,7 +77,7 @@ export default function OddsAnalysis({ url }: { url: string }) {
 
   return (
     <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="text-base font-semibold text-gray-800">AI オッズ分析</h2>
         <button
           onClick={handleAnalyze}
@@ -81,6 +86,14 @@ export default function OddsAnalysis({ url }: { url: string }) {
         >
           {isLoading ? '分析中...' : 'AI分析を実行'}
         </button>
+      </div>
+      <div className="flex items-center justify-end gap-3 mb-3 min-h-[1.25rem]">
+        {elapsedMs !== null && (
+          <p className="text-xs text-gray-400">取得時間: {(elapsedMs / 1000).toFixed(1)}秒</p>
+        )}
+        {cache.has(url) && !isLoading && (
+          <p className="text-xs text-gray-400">再度分析する際は画面をリロードしてください</p>
+        )}
       </div>
 
       {error && (
