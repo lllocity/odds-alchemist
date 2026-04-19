@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getOddsData, getAlerts } from '@/lib/sheets';
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function toFloat(s: string | undefined): number | null {
   if (!s) return null;
@@ -230,12 +230,7 @@ ${alertsData}
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       systemInstruction: systemPrompt,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        // Thinking を無効化して応答を高速化
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        thinkingConfig: { thinkingBudget: 0 } as any,
-      },
+      generationConfig: { responseMimeType: 'application/json' },
     });
 
     const result = await model.generateContent(userPrompt);
