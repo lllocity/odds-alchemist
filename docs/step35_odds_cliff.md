@@ -6,6 +6,46 @@
 
 ---
 
+## このステップで実施するリファクタリング
+
+### 1. `sortedByWin` を `detect()` から各サブメソッドに渡す形に統一
+
+`detectOddsCliff()` も `sortedByWin` を必要とするが、現状は `detectRankDivergence()` 内でローカルに `validPlaceList` だけ生成している。`sortedByWin` は `detect()` 内ですでに生成されているため、このリストをサブメソッドの引数として明示的に渡すよう整理する。
+
+**変更後のサブメソッドシグネチャ（代表例）:**
+```java
+private void detectOddsCliff(List<OddsData> sortedByWin, String url, List<AnomalyAlertDto> alerts)
+```
+
+`url` は `sortedByWin.get(0).url()` でも取れるが、明示的に渡すほうが読みやすい。`detect()` 内で `sortedByWin` が空でない場合に `sortedByWin.get(0).url()` で取得してローカル変数に保持し、各メソッドに渡す。
+
+### 2. `previousCliffPosition` の追加
+
+```java
+// 前回の断層位置（n番人気とn+1番人気の間）: キー=URL
+private final ConcurrentHashMap<String, Integer> previousCliffPosition = new ConcurrentHashMap<>();
+```
+
+### 3. `clearStateForUrl()` への `previousCliffPosition` クリアの追加
+
+```java
+public void clearStateForUrl(String url) {
+    String prefix = url + ":";
+    previousSnapshots.keySet().removeIf(k -> k.startsWith(prefix));
+    baselineWinOdds.keySet().removeIf(k -> k.startsWith(prefix));
+    phaseBaselines.keySet().removeIf(k -> k.startsWith(prefix));
+    previousCliffPosition.remove(url);  // 追加（キーが URL 単体）
+}
+```
+
+### 4. `resetBaselineIfNewDay()` への `previousCliffPosition` クリアの追加
+
+```java
+previousCliffPosition.clear();  // 追加
+```
+
+---
+
 ## なぜ有用か（予想への活用観点）
 
 ### この検知が捉える市場現象

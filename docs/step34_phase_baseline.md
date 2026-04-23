@@ -6,6 +6,53 @@
 
 ---
 
+## このステップで実施するリファクタリング
+
+### 1. `detect()` シグネチャへの `startTime` 追加
+
+フェーズ判定のために発走時刻を `detect()` に渡す形に変更する。`OddsSyncService` から `OddsAnomalyDetector` への循環依存を回避するためシグネチャ引数として渡す。
+
+**変更前:**
+```java
+public List<AnomalyAlertDto> detect(List<OddsData> oddsList)
+```
+
+**変更後:**
+```java
+public List<AnomalyAlertDto> detect(List<OddsData> oddsList, Optional<LocalTime> startTime)
+```
+
+- `OddsSyncService.fetchAndSaveOdds()` 内の呼び出し箇所を `anomalyDetector.detect(oddsListWithUrl, startTime)` に変更（`startTime` はすでにその時点で取得済み）
+- 既存の `OddsAnomalyDetectorTest` は `detect(list)` を直接呼んでいるため、テスト用オーバーロード `detect(List<OddsData> oddsList)` を追加するか、呼び出し側に `Optional.empty()` を渡す形で対応する
+
+### 2. `Phase` enum と `phaseBaselines` Map の追加
+
+```java
+enum Phase { MORNING, PRE_30, PRE_10 }
+private final ConcurrentHashMap<String, Map<Phase, Double>> phaseBaselines = new ConcurrentHashMap<>();
+```
+
+### 3. `clearStateForUrl()` への `phaseBaselines` クリアの追加（Step 33 で作成済みのメソッドを拡張）
+
+```java
+public void clearStateForUrl(String url) {
+    String prefix = url + ":";
+    previousSnapshots.keySet().removeIf(k -> k.startsWith(prefix));
+    baselineWinOdds.keySet().removeIf(k -> k.startsWith(prefix));
+    phaseBaselines.keySet().removeIf(k -> k.startsWith(prefix));  // 追加
+}
+```
+
+### 4. `resetBaselineIfNewDay()` への `phaseBaselines` クリアの追加
+
+```java
+baselineWinOdds.clear();
+previousSnapshots.clear();
+phaseBaselines.clear();  // 追加
+```
+
+---
+
 ## なぜ有用か（予想への活用観点）
 
 ### この検知が捉える市場現象

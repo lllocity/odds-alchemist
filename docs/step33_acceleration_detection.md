@@ -2,7 +2,54 @@
 
 ## 概要
 
-スクレイピング間隔が1分〜30分と変動する環境で、「単位時間あたりの支持率変化量」を算出することで、インターバルに依存しない一貫した異常検知を実現する。現在のロジックA（前回比）を置き換える形で拡張し、短時間の集中的な投票行動を正確に捉える。
+スクレイピング間隔が1分〜30分と変動する環境で、「単位時間あたりの支持率変化量」を算出することで、インターバルに依存しない一貫した異常検知を実現する。ロジックA（前回比）と並行して新たにロジックD として追加し、短時間の集中的な投票行動を正確に捉える。
+
+---
+
+## このステップで実施するリファクタリング
+
+Step 33 の実装に合わせて以下のリファクタリングを同時に行う。後続ステップ（Step 34〜36）の土台となるため、このステップで完結させること。
+
+### 1. `previousWinOdds` → `previousSnapshots` への置き換え
+
+**変更前:**
+```java
+private final ConcurrentHashMap<String, Double> previousWinOdds = new ConcurrentHashMap<>();
+```
+
+**変更後:**
+```java
+record OddsSnapshot(double winOdds, Instant processedAt) {}
+private final ConcurrentHashMap<String, OddsSnapshot> previousSnapshots = new ConcurrentHashMap<>();
+```
+
+- `OddsSnapshot` は `OddsAnomalyDetector` の inner record として定義
+- ロジックA の `detectSupportRateIncrease()` 内の `previousWinOdds.get(key)` を `previousSnapshots.get(key).winOdds()` に修正
+- `detect()` 末尾の更新処理を `previousSnapshots.put(key, new OddsSnapshot(d.winOdds(), now))` に変更
+- `now` は `detect()` の先頭で `Instant now = Instant.now(clock)` として一度取得し、各サブメソッドに渡す
+
+### 2. `clearStateForUrl(String url)` の追加
+
+URL監視対象削除時に呼び出す一元クリーンアップメソッドを追加する。後続ステップで追加される Map もここに集約していく。
+
+```java
+public void clearStateForUrl(String url) {
+    String prefix = url + ":";
+    previousSnapshots.keySet().removeIf(k -> k.startsWith(prefix));
+    baselineWinOdds.keySet().removeIf(k -> k.startsWith(prefix));
+}
+```
+
+- `OddsSyncService` に `clearStateForUrl(String url)` 委譲メソッドを追加
+- `OddsTargetsController.removeTarget()` で `oddsSyncService.clearCachedStartTime(url)` の直後に `oddsSyncService.clearStateForUrl(url)` を呼び出す
+
+### 3. `resetBaselineIfNewDay()` への `previousSnapshots` クリア追加
+
+日付変更時に昨日のスナップショットを破棄する（大幅な時間差による誤検知防止）:
+```java
+baselineWinOdds.clear();
+previousSnapshots.clear();  // 追加
+```
 
 ---
 

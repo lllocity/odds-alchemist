@@ -6,6 +6,50 @@
 
 ---
 
+## このステップで実施するリファクタリング
+
+Step 33〜35 でのリファクタリングがすべて完了しているため、Step 36 でのリファクタリングは最小限。
+
+### 1. `previousRankGap` の追加
+
+```java
+// 前回の単複乖離量: キー="URL:馬番"
+private final ConcurrentHashMap<String, Integer> previousRankGap = new ConcurrentHashMap<>();
+```
+
+### 2. `clearStateForUrl()` への `previousRankGap` クリアの追加（最終形）
+
+Step 36 完了時点での `clearStateForUrl()` 完成形:
+
+```java
+public void clearStateForUrl(String url) {
+    String prefix = url + ":";
+    previousSnapshots.keySet().removeIf(k -> k.startsWith(prefix));
+    baselineWinOdds.keySet().removeIf(k -> k.startsWith(prefix));
+    phaseBaselines.keySet().removeIf(k -> k.startsWith(prefix));
+    previousRankGap.keySet().removeIf(k -> k.startsWith(prefix));  // 追加
+    previousCliffPosition.remove(url);
+}
+```
+
+### 3. `resetBaselineIfNewDay()` への `previousRankGap` クリアの追加（最終形）
+
+```java
+private void resetBaselineIfNewDay() {
+    LocalDate today = LocalDate.now(clock);
+    if (!today.equals(lastBaselineResetDate)) {
+        baselineWinOdds.clear();
+        previousSnapshots.clear();
+        phaseBaselines.clear();
+        previousCliffPosition.clear();
+        previousRankGap.clear();  // 追加
+        lastBaselineResetDate = today;
+    }
+}
+```
+
+---
+
 ## なぜ有用か（予想への活用観点）
 
 ### この検知が捉える市場現象
