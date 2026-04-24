@@ -10,8 +10,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import com.oddsalchemist.backend.util.SheetsDates;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -46,15 +48,15 @@ public class OddsAnomalyDetector {
     static final int TREND_RANK_MIN = 5;
     static final int TREND_RANK_MAX = 12;
 
+    /** 支持率加速度の閾値（0.5%/分 = 0.005） */
+    static final BigDecimal ACCELERATION_THRESHOLD = new BigDecimal("0.005");
+
     /** BigDecimal除算時の小数点以下桁数 */
     private static final int SUPPORT_RATE_SCALE = 10;
 
 
-    /**
-     * 前回の単勝オッズを保持するインメモリキャッシュ。
-     * キー: "URL:馬番"（同名レースが同日に複数存在しうるため、URLで一意に識別する）
-     */
-    private final ConcurrentHashMap<String, Double> previousWinOdds = new ConcurrentHashMap<>();
+    /** 前回スナップショット（単勝オッズ＋取得時刻）を保持するインメモリキャッシュ。キー: "URL:馬番" */
+    private final ConcurrentHashMap<String, OddsSnapshot> previousSnapshots = new ConcurrentHashMap<>();
 
     /**
      * その日の初回detect()呼び出し時のオッズを保持するインメモリキャッシュ。
@@ -93,6 +95,9 @@ public class OddsAnomalyDetector {
         // 日付変更時に初期基準値をリセット
         resetBaselineIfNewDay();
 
+        // 現在時刻を1回だけ取得（加速度計算とスナップショット保存で同じ基準時刻を使う）
+        Instant now = Instant.now(clock);
+
         List<AnomalyAlertDto> alerts = new ArrayList<>();
 
         // 単勝オッズが有効なデータのみを対象とする
@@ -128,8 +133,12 @@ public class OddsAnomalyDetector {
             // ロジックC: その日の初回detect()呼び出し時のオッズからのトレンド逸脱検知
             detectTrendDeviation(validList, top3Keys, winRankMap, alerts);
 
-            // 前回データを更新（上位3番人気を含む全有効馬）
-            validList.forEach(d -> previousWinOdds.put(buildKey(d.url(), d.horseNumber()), d.winOdds()));
+            // ロジックD: 支持率の加速度検知（時間正規化）
+            detectAcceleration(validList, top3Keys, now, alerts);
+
+            // 前回スナップショットを更新（上位3番人気を含む全有効馬）
+            validList.forEach(d -> previousSnapshots.put(buildKey(d.url(), d.horseNumber()),
+                    new OddsSnapshot(d.winOdds(), now)));
         }
 
         // 検知したアラートを累積リストに追加（起動後の全検知履歴を保持）
@@ -155,10 +164,11 @@ public class OddsAnomalyDetector {
                 continue; // 上位3番人気は除外
             }
 
-            Double prevOdds = previousWinOdds.get(key);
-            if (prevOdds == null || prevOdds <= 0) {
+            OddsSnapshot prevSnapshot = previousSnapshots.get(key);
+            if (prevSnapshot == null || prevSnapshot.winOdds() <= 0) {
                 continue; // 前回データなし（初回実行）はスキップ
             }
+            double prevOdds = prevSnapshot.winOdds();
 
             BigDecimal increase = toSupportRate(current.winOdds()).subtract(toSupportRate(prevOdds));
 
@@ -284,9 +294,70 @@ public class OddsAnomalyDetector {
         LocalDate today = LocalDate.now(clock);
         if (!today.equals(lastBaselineResetDate)) {
             baselineWinOdds.clear();
+            previousSnapshots.clear();
             lastBaselineResetDate = today;
             logger.info("日付変更を検知しました。初回オッズ基準値をリセットします: {}", today);
         }
+    }
+
+    /**
+     * ロジックD: 支持率の加速度（時間正規化）を検知します。
+     * スクレイピング間隔が変動しても「単位時間あたりの支持率変化量」で一貫して判定する。
+     * 計算式: (Δ支持率) / (Δ時刻[分]) >= ACCELERATION_THRESHOLD (0.005 = 0.5%/分)
+     */
+    private void detectAcceleration(
+            List<OddsData> validList,
+            Set<String> top3Keys,
+            Instant now,
+            List<AnomalyAlertDto> alerts) {
+
+        for (OddsData current : validList) {
+            String key = buildKey(current.url(), current.horseNumber());
+            if (top3Keys.contains(key)) {
+                continue;
+            }
+
+            OddsSnapshot prev = previousSnapshots.get(key);
+            if (prev == null || prev.winOdds() <= 0) {
+                continue;
+            }
+
+            long deltaSeconds = ChronoUnit.SECONDS.between(prev.processedAt(), now);
+            if (deltaSeconds <= 0) {
+                continue;
+            }
+
+            BigDecimal currentRate = toSupportRate(current.winOdds());
+            BigDecimal prevRate    = toSupportRate(prev.winOdds());
+            BigDecimal deltaRate   = currentRate.subtract(prevRate);
+            BigDecimal deltaMin    = BigDecimal.valueOf(deltaSeconds / 60.0);
+            BigDecimal acceleration = deltaRate.divide(deltaMin, 6, RoundingMode.HALF_UP);
+
+            if (acceleration.compareTo(ACCELERATION_THRESHOLD) >= 0) {
+                alerts.add(new AnomalyAlertDto(
+                        current.raceName(),
+                        current.horseNumber(),
+                        current.horseName(),
+                        "支持率加速",
+                        acceleration.setScale(3, RoundingMode.HALF_UP).doubleValue(),
+                        LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
+                logger.info("【支持率加速検知】馬番={}, 馬名={}, 加速度={}/分, 経過秒={}, 前回オッズ={}, 現在オッズ={}",
+                        current.horseNumber(), current.horseName(), acceleration, deltaSeconds,
+                        prev.winOdds(), current.winOdds());
+            }
+        }
+    }
+
+    /**
+     * 指定URLの前回スナップショット・基準値キャッシュを削除します。
+     * URL監視対象から削除する際に呼び出します。
+     *
+     * @param url 削除対象URL
+     */
+    public void clearStateForUrl(String url) {
+        previousSnapshots.keySet().removeIf(key -> key.startsWith(url + ":"));
+        baselineWinOdds.keySet().removeIf(key -> key.startsWith(url + ":"));
+        logger.info("URLの検知状態をクリアしました: {}", url);
     }
 
     /**
@@ -307,4 +378,7 @@ public class OddsAnomalyDetector {
     private String buildKey(String url, String horseNumber) {
         return url + ":" + horseNumber;
     }
+
+    /** 前回オッズと取得時刻のスナップショット（ロジックD の加速度計算に使用）。 */
+    record OddsSnapshot(double winOdds, Instant processedAt) {}
 }

@@ -104,6 +104,7 @@ public class OddsTargetsController {
         }
         scheduler.cancelUrl(url);
         oddsSyncService.clearCachedStartTime(url);
+        oddsSyncService.clearStateForUrl(url);
         return ResponseEntity.ok(Map.of("message", "URLを削除しました", "urls", targetUrlStore.getUrls()));
     }
 }
