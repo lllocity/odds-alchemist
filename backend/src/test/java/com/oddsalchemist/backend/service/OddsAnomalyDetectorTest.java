@@ -416,6 +416,128 @@ class OddsAnomalyDetectorTest {
                 .isEmpty();
     }
 
+    // ===== ロジックD: 支持率加速度検知 =====
+
+    @Test
+    void detectAcceleration_初回実行ではアラートが発生しないこと() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 10.0, 3.0, 5.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("支持率加速"))).isEmpty();
+    }
+
+    @Test
+    void detectAcceleration_閾値以上の加速度でアラートが発生すること() {
+        // 加速度 = (1/5 - 1/10) / (60秒/60) = 0.1 / 1分 = 0.1 >= 0.005
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 10.0, 3.0, 5.0)
+        ));
+
+        // 60秒後に単勝5.0へ短縮 → 加速度 = 0.1/分
+        clock.setInstant(Instant.parse("2026-01-01T09:01:00Z"));
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 5.0, 2.5, 4.0)
+        ));
+
+        List<AnomalyAlertDto> accAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("支持率加速")).toList();
+        assertThat(accAlerts).hasSize(1);
+        assertThat(accAlerts.get(0).horseNumber()).isEqualTo("5");
+        assertThat(accAlerts.get(0).value()).isGreaterThanOrEqualTo(0.005);
+    }
+
+    @Test
+    void detectAcceleration_閾値未満の加速度ではアラートが発生しないこと() {
+        // 加速度 = (1/19 - 1/20) / (60秒/60) ≈ 0.00263/分 < 0.005
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 20.0, 4.0, 8.0)
+        ));
+
+        clock.setInstant(Instant.parse("2026-01-01T09:01:00Z"));
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 19.0, 4.0, 8.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("支持率加速"))).isEmpty();
+    }
+
+    @Test
+    void detectAcceleration_上位3番人気はアラートが発生しないこと() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        detector.detect(List.of(
+                odds("1", "人気馬A", 2.0, 1.2, 1.5),
+                odds("2", "人気馬B", 3.0, 1.4, 2.0),
+                odds("3", "人気馬C", 4.0, 1.6, 2.5),
+                odds("5", "中穴馬", 10.0, 3.0, 5.0)
+        ));
+
+        // 60秒後: 1番人気が大きく短縮（高加速度）→ 除外対象
+        clock.setInstant(Instant.parse("2026-01-01T09:01:00Z"));
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.1, 1.1, 1.3),
+                odds("2", "人気馬B", 1.5, 1.2, 1.5),
+                odds("3", "人気馬C", 2.0, 1.3, 2.0),
+                odds("5", "中穴馬", 10.0, 3.0, 5.0)
+        ));
+
+        assertThat(alerts.stream()
+                .filter(a -> a.alertType().equals("支持率加速"))
+                .map(AnomalyAlertDto::horseNumber))
+                .doesNotContain("1", "2", "3");
+    }
+
+    @Test
+    void detectAcceleration_間隔が長いほど加速度が小さくなること() {
+        // 同じオッズ変化でも経過時間が長いと加速度が小さくなる
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 10.0, 3.0, 5.0)
+        ));
+
+        // 30分後に同じオッズ変化 → 加速度 = 0.1/30分 ≈ 0.00333 < 0.005 → アラートなし
+        clock.setInstant(Instant.parse("2026-01-01T09:30:00Z"));
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.5, 1.1, 1.3),
+                odds("2", "人気馬B", 2.0, 1.2, 1.5),
+                odds("3", "人気馬C", 3.0, 1.4, 2.0),
+                odds("5", "中穴馬", 5.0, 2.5, 4.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("支持率加速"))).isEmpty();
+    }
+
     @Test
     void detect_同一インスタンスで日付が変わると基準値がリセットされること() {
         // 可変クロックを使って同一インスタンスでの日付変更をテスト

@@ -115,6 +115,16 @@ public class OddsSyncService {
     }
 
     /**
+     * 指定URLの異常検知状態（前回スナップショット・基準値）をクリアします。
+     * URL監視対象から削除する際に呼び出します。
+     *
+     * @param url 削除対象URL
+     */
+    public void clearStateForUrl(String url) {
+        anomalyDetector.clearStateForUrl(url);
+    }
+
+    /**
      * 検知されたアラートを "Alerts" シートへ追記します。
      * アラートがない場合は何もしません。
      * 書き込み失敗時はシステムを止めず、ERRORログを出力します。
