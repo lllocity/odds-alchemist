@@ -22,13 +22,14 @@ import java.util.stream.Collectors;
 
 /**
  * オッズデータの異常を検知するサービス。
- * 以下の5種類の異常を検知する:
+ * 以下の6種類の異常を検知する:
  * <ul>
  *   <li>ロジックA: 支持率の急増（前回比 +2.0%以上）</li>
  *   <li>ロジックB: 単複オッズの順位乖離（ギャップ3以上）</li>
  *   <li>ロジックC: その日の初回detect()呼び出し時のオッズを基準値としたトレンド逸脱（基準比 +5.0%以上, 中穴・大穴帯）</li>
  *   <li>ロジックD: 支持率の加速度（時間正規化、0.5%/分以上）</li>
  *   <li>ロジックE: フェーズ別トレンド逸脱（発走までの残り時間に応じた3段階基準点）</li>
+ *   <li>ロジックF: オッズ断層（クリフ）の動的検知（断層位置の凝縮/拡散）</li>
  * </ul>
  * 上位3番人気（単勝1〜3位）はノイズが大きいため検知対象から除外する。
  * 初期基準値は日次リセットされ、その日の最初の検知呼び出し時に設定される。
@@ -54,6 +55,9 @@ public class OddsAnomalyDetector {
     /** 支持率加速度の閾値（0.5%/分 = 0.005） */
     static final BigDecimal ACCELERATION_THRESHOLD = new BigDecimal("0.005");
 
+    /** オッズ断層（クリフ）の閾値（隣接オッズ比 1.5倍以上で断層とみなす） */
+    static final double CLIFF_RATIO_THRESHOLD = 1.5;
+
     /** BigDecimal除算時の小数点以下桁数 */
     private static final int SUPPORT_RATE_SCALE = 10;
 
@@ -75,6 +79,12 @@ public class OddsAnomalyDetector {
      * キー: "URL:馬番", 値: Phase → 基準単勝オッズ
      */
     private final ConcurrentHashMap<String, Map<Phase, Double>> phaseBaselines = new ConcurrentHashMap<>();
+
+    /**
+     * 前回の断層位置（n番人気とn+1番人気の間）を保持するキャッシュ。
+     * キー: URL, 値: 断層インデックス（sortedByWin の 1-based の右側位置）
+     */
+    private final ConcurrentHashMap<String, Integer> previousCliffPosition = new ConcurrentHashMap<>();
 
     /** 最新の異常検知アラートリスト（スレッドセーフ） */
     private final List<AnomalyAlertDto> latestAlerts = new CopyOnWriteArrayList<>();
@@ -161,6 +171,9 @@ public class OddsAnomalyDetector {
 
             // ロジックE: フェーズ別トレンド逸脱検知
             detectPhaseDeviation(validList, top3Keys, startTime, alerts);
+
+            // ロジックF: オッズ断層（クリフ）の動的検知
+            detectOddsCliff(sortedByWin, sortedByWin.get(0).url(), alerts);
 
             // 前回スナップショットを更新（上位3番人気を含む全有効馬）
             validList.forEach(d -> previousSnapshots.put(buildKey(d.url(), d.horseNumber()),
@@ -358,6 +371,52 @@ public class OddsAnomalyDetector {
     }
 
     /**
+     * ロジックF: オッズ断層（クリフ）の動的検知。
+     * 単勝オッズの隣接比率が {@code CLIFF_RATIO_THRESHOLD} 以上となる位置を「断層」とし、
+     * 前回と比べて断層位置が上位方向に移動した場合を「凝縮」、下位方向を「拡散」として検知する。
+     * 代表馬は断層直前（最後の「勝負圏内」）の馬を使用する。
+     *
+     * @param sortedByWin 単勝オッズ昇順ソート済みリスト（winOdds > 0 のみ）
+     * @param url         レース識別URL
+     * @param alerts      検知アラートの追記先
+     */
+    private void detectOddsCliff(List<OddsData> sortedByWin, String url, List<AnomalyAlertDto> alerts) {
+        if (sortedByWin.size() < 3) return;
+
+        int cliffPosition = -1;
+        double cliffRatio = 0.0;
+        for (int i = 1; i < sortedByWin.size(); i++) {
+            double ratio = sortedByWin.get(i).winOdds() / sortedByWin.get(i - 1).winOdds();
+            if (ratio >= CLIFF_RATIO_THRESHOLD) {
+                cliffPosition = i;
+                cliffRatio = ratio;
+                break; // 最上位の断層のみ対象
+            }
+        }
+
+        if (cliffPosition < 0) return; // 断層なし → previousCliffPosition は更新しない
+
+        Integer prevPosition = previousCliffPosition.get(url);
+        previousCliffPosition.put(url, cliffPosition);
+
+        if (prevPosition == null || prevPosition.equals(cliffPosition)) return; // 初回 or 変化なし
+
+        String direction = cliffPosition < prevPosition ? "凝縮" : "拡散";
+        OddsData representative = sortedByWin.get(cliffPosition - 1); // 断層直前の馬
+        double roundedRatio = BigDecimal.valueOf(cliffRatio).setScale(2, RoundingMode.HALF_UP).doubleValue();
+        alerts.add(new AnomalyAlertDto(
+                representative.raceName(),
+                representative.horseNumber(),
+                representative.horseName(),
+                "オッズ断層[" + direction + "]",
+                roundedRatio,
+                LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
+        logger.info("【オッズ断層検知】方向={}, 断層位置={}, 断層比率={}, 断層直前馬番={}, 馬名={}",
+                direction, cliffPosition, roundedRatio,
+                representative.horseNumber(), representative.horseName());
+    }
+
+    /**
      * 発走時刻と現在時刻からフェーズを判定します。
      * @return MORNING / PRE_30 / PRE_10 のいずれか、発走後は null
      */
@@ -380,6 +439,7 @@ public class OddsAnomalyDetector {
             baselineWinOdds.clear();
             previousSnapshots.clear();
             phaseBaselines.clear();
+            previousCliffPosition.clear();
             lastBaselineResetDate = today;
             logger.info("日付変更を検知しました。初回オッズ基準値をリセットします: {}", today);
         }
@@ -444,6 +504,7 @@ public class OddsAnomalyDetector {
         previousSnapshots.keySet().removeIf(key -> key.startsWith(prefix));
         baselineWinOdds.keySet().removeIf(key -> key.startsWith(prefix));
         phaseBaselines.keySet().removeIf(key -> key.startsWith(prefix));
+        previousCliffPosition.remove(url);
         logger.info("URLの検知状態をクリアしました: {}", url);
     }
 

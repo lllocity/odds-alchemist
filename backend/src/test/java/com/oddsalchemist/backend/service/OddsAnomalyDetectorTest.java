@@ -116,9 +116,10 @@ class OddsAnomalyDetectorTest {
                 odds("4", "穴馬", 15.0, 3.0, 6.0)
         ));
 
-        // 上位3番人気(1,2,3番)の支持率急増は除外され、アラートなし
+        // 上位3番人気(1,2,3番)は支持率急増アラートの対象外
         assertThat(alerts).extracting(AnomalyAlertDto::alertType).noneMatch(t -> t.equals("支持率急増"));
-        assertThat(alerts).extracting(AnomalyAlertDto::horseNumber)
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("支持率急増")))
+                .extracting(AnomalyAlertDto::horseNumber)
                 .doesNotContain("1", "2", "3");
     }
 
@@ -683,6 +684,153 @@ class OddsAnomalyDetectorTest {
                 .filter(a -> a.alertType().equals("フェーズ逸脱[30分前]"))
                 .map(AnomalyAlertDto::horseNumber))
                 .contains("5");
+    }
+
+    // ===== ロジックF: オッズ断層（クリフ）検知 =====
+
+    @Test
+    void detectOddsCliff_初回検知ではアラートが発生しないこと() {
+        // [1.5, 1.8, 2.2, 4.1]: 4.1/2.2 ≈ 1.86 ≥ 1.5 → 断層位置=3（初回なのでアラートなし）
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 4.1, 1.8, 3.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("オッズ断層"))).isEmpty();
+    }
+
+    @Test
+    void detectOddsCliff_断層位置が同じ場合はアラートが発生しないこと() {
+        // 1回目: 断層位置=3 を記録
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 4.1, 1.8, 3.0)
+        ));
+
+        // 2回目: 同じ断層位置=3 → アラートなし
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 4.1, 1.8, 3.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("オッズ断層"))).isEmpty();
+    }
+
+    @Test
+    void detectOddsCliff_断層が上位に移動した場合に凝縮アラートが発生すること() {
+        // 1回目: 断層位置=3 ([1.5, 1.8, 2.2, 4.1]: 4.1/2.2≈1.86)
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 4.1, 1.8, 3.0)
+        ));
+
+        // 2回目: 断層位置=2 ([1.5, 1.8, 3.0, 4.0]: 3.0/1.8≈1.67) → 凝縮
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 3.0, 1.5, 2.2),
+                odds("4", "馬4", 4.0, 1.8, 3.0)
+        ));
+
+        List<AnomalyAlertDto> cliffAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("オッズ断層[凝縮]")).toList();
+        assertThat(cliffAlerts).hasSize(1);
+        // 断層直前は位置2の前 = sortedByWin[1] = 馬2
+        assertThat(cliffAlerts.get(0).horseNumber()).isEqualTo("2");
+    }
+
+    @Test
+    void detectOddsCliff_断層が下位に移動した場合に拡散アラートが発生すること() {
+        // 1回目: 断層位置=2 ([1.5, 1.8, 3.0, 4.0]: 3.0/1.8≈1.67)
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 3.0, 1.5, 2.2),
+                odds("4", "馬4", 4.0, 1.8, 3.0),
+                odds("5", "馬5", 5.0, 2.0, 4.0)
+        ));
+
+        // 2回目: 断層位置=4 ([1.5, 1.8, 2.2, 2.8, 5.2]: 5.2/2.8≈1.86) → 拡散
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 2.8, 1.8, 3.0),
+                odds("5", "馬5", 5.2, 2.0, 4.0)
+        ));
+
+        List<AnomalyAlertDto> cliffAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("オッズ断層[拡散]")).toList();
+        assertThat(cliffAlerts).hasSize(1);
+        // 断層直前は位置4の前 = sortedByWin[3] = 馬4
+        assertThat(cliffAlerts.get(0).horseNumber()).isEqualTo("4");
+    }
+
+    @Test
+    void detectOddsCliff_全隣接比率が閾値未満の場合はアラートが発生しないこと() {
+        // 1回目: 断層位置=3 を記録しておく
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 4.1, 1.8, 3.0)
+        ));
+
+        // 2回目: 全比率 < 1.5 → 断層なし → previousCliffPosition 更新なし → アラートなし
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.4, 1.5, 2.2),
+                odds("4", "馬4", 3.2, 1.8, 3.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("オッズ断層"))).isEmpty();
+    }
+
+    @Test
+    void detectOddsCliff_有効馬が2頭以下の場合はスキップされること() {
+        // 2頭しかいない → detectOddsCliff はサイズチェックで早期リターン
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 3.0, 1.5, 2.5)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("オッズ断層"))).isEmpty();
+    }
+
+    @Test
+    void detectOddsCliff_日付変更後にpreviousCliffPositionがリセットされること() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        // day1: 断層位置=3 を記録
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 2.2, 1.5, 2.2),
+                odds("4", "馬4", 4.1, 1.8, 3.0)
+        ));
+
+        // 翌日に変更 → previousCliffPosition がリセットされる
+        clock.setInstant(Instant.parse("2026-01-02T09:00:00Z"));
+
+        // day2 1回目: 断層位置=2（凝縮のはずだが前回データなし → アラートなし）
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 1.1, 1.3),
+                odds("2", "馬2", 1.8, 1.3, 1.8),
+                odds("3", "馬3", 3.0, 1.5, 2.2),
+                odds("4", "馬4", 4.0, 1.8, 3.0)
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("オッズ断層"))).isEmpty();
     }
 
     // ===== ヘルパークラス =====
