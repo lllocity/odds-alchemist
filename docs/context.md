@@ -63,8 +63,14 @@ GCP サービスアカウント
 管理操作（URL登録・データクリア）は自宅ローカルからのみ実行可能。
 
 ### 異常検知
-- `OddsAnomalyDetector` がロジックA（支持率急増）・B（順位乖離）・C（トレンド逸脱）を実行。
-- バックエンド起動後の全アラートを累積保持し、`GET /api/odds/alerts` でフロントエンドに提供。
+- `OddsAnomalyDetector` が以下のロジックを実行（11種のアラートタイプ）:
+  - **ロジックA** 支持率急増（4番人気以下、前回比+2%以上）
+  - **ロジックB** 順位乖離（単複人気順位差 3以上）+ 拡大中/解消中
+  - **ロジックC** トレンド逸脱（5〜12番人気、当日初回比+5%以上）
+  - **ロジックD** 支持率加速（4番人気以下、0.5%/分以上）
+  - **ロジックE** フェーズ別逸脱（朝/30分前/10分前の基準点から+5%以上）
+  - **ロジックF** オッズ断層の凝縮/拡散（隣接オッズ比率1.5倍以上の断層位置変化）
+- アラートは Google Sheets `Alerts!A:G` へ Append。閲覧用 FE は Sheets から直接読む（BE 不要）。
 
 ### 永続化
 - オッズデータ（A〜H列 8列構成）は `sheetRange` シートへ Append のみ。
@@ -100,7 +106,7 @@ GCP サービスアカウント
 - Step 28: NextAuth v5 + Google OAuth + proxy（認証ミドルウェア） ✅（コミット済み）
 - Step 29: 閲覧用 page.tsx・コンポーネント移植 ✅（コミット済み）
 - Step 30: 管理用 FE から閲覧系機能を削除・1カラム化 ✅（コミット済み）
-- Step 31: 未着手
+- Step 31: Vercel デプロイ・NextAuth 認証設定 ✅（コミット済み）
 
 **Step 28 実装上の注意点**:
 - `middleware.ts` は Next.js 16 で `proxy.ts` に改名
@@ -111,6 +117,27 @@ GCP サービスアカウント
 - proxy で不正メールのセッションクッキーを強制削除
 
 **実装ステップ詳細**: `docs/step23_gcp_readonly_sa.md` 〜 `docs/step31_vercel_deploy.md` を参照。
+
+---
+
+### Steps 32〜36 + AI分析拡張: 検知ロジック強化（2026-04）
+
+**Step 32（AI分析機能）**:
+- `frontend-viewer/app/api/odds/analysis/route.ts` — Gemini API（Flash Thinking）を使った馬券分析エンドポイント
+- `frontend-viewer/app/components/OddsAnalysis.tsx` — 分析結果表示コンポーネント（verdict別カード・買い目推奨）
+- 買い目推奨は三連複（本命×対抗×3着紐）・ワイドに特化
+
+**Steps 33〜36（検知ロジック拡張）**:
+- **Step 33 ロジックD**: 支持率の加速度検知（単位時間あたりの変化速度）
+- **Step 34 ロジックE**: フェーズ別トレンド逸脱（朝/30分前/10分前の基準点ごとに独立評価）
+- **Step 35 ロジックF**: オッズ断層（クリフ）検知 ＋ 凝縮/拡散の動的変化
+- **Step 36 ロジックB拡張**: 順位乖離の変化方向（拡大中/解消中）
+
+**設計決定事項**:
+- `detect(List)` → `detect(List, Optional<LocalTime> startTime)` にオーバーロード追加（後方互換）
+- フェーズ判定は `startTime` から相対時間で決定。発走後は `Optional.empty()` でスキップ
+- 断層アラートの `horseNumber` は「断層直前の境界馬」を示す（レース全体シグナルの代表値）
+- AI分析プロンプトのアラート定義を11種すべてに更新し、タイプ別 verdict 判定指針を追加
 
 ---
 
