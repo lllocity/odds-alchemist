@@ -134,19 +134,35 @@ public class SlackNotifyClient {
 
     private String alertEmoji(String alertType) {
         return switch (alertType) {
-            case "支持率急増"   -> "🔥";
-            case "順位乖離"     -> "⚡";
-            case "トレンド逸脱" -> "📈";
-            default             -> "🎯";
+            case "支持率急増"         -> "🔥";
+            case "支持率加速"         -> "🚀";
+            case "順位乖離"           -> "⚡";
+            case "順位乖離[拡大中]"   -> "📊";
+            case "順位乖離[解消中]"   -> "📉";
+            case "トレンド逸脱"       -> "📈";
+            case "フェーズ逸脱[朝]"   -> "🌅";
+            case "フェーズ逸脱[30分前]" -> "⏰";
+            case "フェーズ逸脱[10分前]" -> "🔔";
+            case "オッズ断層[凝縮]"   -> "🎯";
+            case "オッズ断層[拡散]"   -> "🌊";
+            default                   -> "❓";
         };
     }
 
     private String alertCaption(String alertType, double value) {
         return switch (alertType) {
-            case "支持率急増"   -> String.format("支持率が %.1f%% 急上昇中！", value * 100);
-            case "順位乖離"     -> String.format("単複ギャップ %.0f 位分の歪み、複勝が美味しいかも", value);
-            case "トレンド逸脱" -> String.format("今日イチの動き、支持率 +%.1f%% 乖離", value * 100);
-            default             -> String.format("数値: %s", value);
+            case "支持率急増"   -> String.format("支持率が +%.1f%% 急上昇中！玄人筋の仕込みか", value * 100);
+            case "支持率加速"   -> String.format("%.2f%%/分 で加速中。流れが継続しており信頼度高め", value * 100);
+            case "順位乖離"     -> String.format("単複ギャップ %.0f 差。「勝ちきれないが来る」市場評価、複勝・ワイドの軸候補", value);
+            case "順位乖離[拡大中]" -> String.format("乖離がさらに +%.0f 拡大。複勝/ワイドを仕込み続けるタイミング", value);
+            case "順位乖離[解消中]" -> String.format("乖離が %.0f 縮小。単勝/馬単への切り替えを検討", value);
+            case "トレンド逸脱" -> String.format("今日イチの動き、支持率 +%.1f%% 乖離。中穴・大穴の注目株", value * 100);
+            case "フェーズ逸脱[朝]"   -> String.format("朝から +%.1f%% 継続上昇。長時間資金流入で信頼度高め", value * 100);
+            case "フェーズ逸脱[30分前]" -> String.format("30分前比 +%.1f%% 急変。直前の情報筋仕込みの可能性", value * 100);
+            case "フェーズ逸脱[10分前]" -> String.format("10分前比 +%.1f%% 急変！最終局面の重要シグナル、今すぐ確認を", value * 100);
+            case "オッズ断層[凝縮]" -> String.format("断層が上位へ移動（比率 %.2f倍）。絞り込みが進行、断層内の上位馬を本命視", value);
+            case "オッズ断層[拡散]" -> String.format("断層が下位へ移動（比率 %.2f倍）。混戦化進行、穴狙い戦略への切り替えを検討", value);
+            default             -> String.format("数値: %.3f", value);
         };
     }
 }
