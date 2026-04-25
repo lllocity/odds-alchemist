@@ -686,6 +686,144 @@ class OddsAnomalyDetectorTest {
                 .contains("5");
     }
 
+    // ===== ロジックB-拡張: 単複順位乖離の変化方向検知 =====
+
+    @Test
+    void detectRankDivergenceTrend_初回検知では変化方向アラートが発生しないこと() {
+        // 初回は previousRankGap なし → 変化方向アラートなし、次回のために記録
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 2.5, 3.5),
+                odds("2", "馬2", 2.0, 3.0, 5.0),
+                odds("3", "馬3", 3.5, 4.0, 7.0),
+                odds("4", "乖離馬", 12.0, 1.1, 1.5)  // winRank=4, placeRank=1, gap=3
+        ));
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("順位乖離["))).isEmpty();
+    }
+
+    @Test
+    void detectRankDivergenceTrend_乖離拡大中アラートが発生すること() {
+        // 1回目: 乖離馬 winRank=4, placeRank=1 → gap=3 を記録
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 5.0, 8.0),
+                odds("2", "馬2", 2.0, 4.0, 7.0),
+                odds("3", "馬3", 3.5, 3.0, 6.0),
+                odds("4", "乖離馬", 8.0, 1.1, 2.0),   // winRank=4, placeRank=1, gap=3
+                odds("5", "馬5", 12.0, 2.5, 5.0),
+                odds("6", "馬6", 20.0, 6.0, 10.0)
+        ));
+
+        // 2回目: 乖離馬 winRank=6, placeRank=1 → gap=5 (delta=2 → 拡大中)
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 5.0, 8.0),
+                odds("2", "馬2", 2.0, 4.0, 7.0),
+                odds("3", "馬3", 3.5, 3.0, 6.0),
+                odds("5", "馬5", 5.0, 2.5, 5.0),      // winRank=4
+                odds("6", "馬6", 7.0, 6.0, 10.0),     // winRank=5
+                odds("4", "乖離馬", 18.0, 1.1, 2.0)    // winRank=6, placeRank=1, gap=5
+        ));
+
+        List<AnomalyAlertDto> trendAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("順位乖離[拡大中]")).toList();
+        assertThat(trendAlerts).hasSize(1);
+        assertThat(trendAlerts.get(0).horseNumber()).isEqualTo("4");
+        assertThat(trendAlerts.get(0).value()).isEqualTo(2.0); // delta = 5 - 3 = 2
+    }
+
+    @Test
+    void detectRankDivergenceTrend_乖離解消中アラートが発生すること() {
+        // 1回目: 乖離馬 gap=5 を記録
+        detector.detect(List.of(
+                odds("1", "馬1", 1.5, 5.0, 8.0),
+                odds("2", "馬2", 2.0, 4.0, 7.0),
+                odds("3", "馬3", 3.5, 3.0, 6.0),
+                odds("5", "馬5", 5.0, 2.5, 5.0),
+                odds("6", "馬6", 7.0, 6.0, 10.0),
+                odds("4", "乖離馬", 18.0, 1.1, 2.0)   // winRank=6, placeRank=1, gap=5
+        ));
+
+        // 2回目: 乖離馬 gap=3 (delta=-2 → 解消中)
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "馬1", 1.5, 5.0, 8.0),
+                odds("2", "馬2", 2.0, 4.0, 7.0),
+                odds("3", "馬3", 3.5, 3.0, 6.0),
+                odds("4", "乖離馬", 8.0, 1.1, 2.0),   // winRank=4, placeRank=1, gap=3
+                odds("5", "馬5", 12.0, 2.5, 5.0),
+                odds("6", "馬6", 20.0, 6.0, 10.0)
+        ));
+
+        List<AnomalyAlertDto> trendAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("順位乖離[解消中]")).toList();
+        assertThat(trendAlerts).hasSize(1);
+        assertThat(trendAlerts.get(0).horseNumber()).isEqualTo("4");
+        assertThat(trendAlerts.get(0).value()).isEqualTo(2.0); // |delta| = |3 - 5| = 2
+    }
+
+    @Test
+    void detectRankDivergenceTrend_ギャップが変化しない場合はアラートが発生しないこと() {
+        List<OddsData> same = List.of(
+                odds("1", "馬1", 1.5, 2.5, 3.5),
+                odds("2", "馬2", 2.0, 3.0, 5.0),
+                odds("3", "馬3", 3.5, 4.0, 7.0),
+                odds("4", "乖離馬", 12.0, 1.1, 1.5)  // gap=3
+        );
+
+        detector.detect(same);
+        List<AnomalyAlertDto> alerts = detector.detect(same);
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("順位乖離["))).isEmpty();
+    }
+
+    @Test
+    void detectRankDivergenceTrend_閾値以下に解消した後は再検知で初回扱いになること() {
+        List<OddsData> gap3 = List.of(
+                odds("1", "馬1", 1.5, 2.5, 3.5),
+                odds("2", "馬2", 2.0, 3.0, 5.0),
+                odds("3", "馬3", 3.5, 4.0, 7.0),
+                odds("4", "乖離馬", 12.0, 1.1, 1.5)  // gap=3
+        );
+        List<OddsData> gap2 = List.of(
+                odds("1", "馬1", 1.5, 1.5, 2.5),
+                odds("2", "馬2", 2.0, 3.0, 5.0),
+                odds("3", "馬3", 3.5, 4.0, 7.0),
+                odds("4", "乖離馬", 12.0, 2.0, 3.5)  // winRank=4, placeRank=2, gap=2 (閾値以下)
+        );
+
+        // 1回目: gap=3 → previousRankGap 記録
+        detector.detect(gap3);
+
+        // 2回目: gap=2（閾値以下）→ previousRankGap 削除、変化方向アラートなし
+        List<AnomalyAlertDto> call2 = detector.detect(gap2);
+        assertThat(call2.stream().filter(a -> a.alertType().startsWith("順位乖離["))).isEmpty();
+
+        // 3回目: gap=3 → 前回データ（prevGap）がないため変化方向アラートなし（初回扱い）
+        List<AnomalyAlertDto> call3 = detector.detect(gap3);
+        assertThat(call3.stream().filter(a -> a.alertType().startsWith("順位乖離["))).isEmpty();
+    }
+
+    @Test
+    void detectRankDivergenceTrend_日付変更後はpreviousRankGapがリセットされること() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        List<OddsData> gap3 = List.of(
+                odds("1", "馬1", 1.5, 2.5, 3.5),
+                odds("2", "馬2", 2.0, 3.0, 5.0),
+                odds("3", "馬3", 3.5, 4.0, 7.0),
+                odds("4", "乖離馬", 12.0, 1.1, 1.5)  // gap=3
+        );
+
+        // day1: gap=3 を記録
+        detector.detect(gap3);
+
+        // 翌日に変更 → previousRankGap リセット
+        clock.setInstant(Instant.parse("2026-01-02T09:00:00Z"));
+
+        // day2 1回目: gap=3 → 前回データなし（リセット済み）→ 変化方向アラートなし
+        List<AnomalyAlertDto> alerts = detector.detect(gap3);
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("順位乖離["))).isEmpty();
+    }
+
     // ===== ロジックF: オッズ断層（クリフ）検知 =====
 
     @Test

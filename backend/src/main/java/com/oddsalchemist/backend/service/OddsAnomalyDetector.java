@@ -86,6 +86,12 @@ public class OddsAnomalyDetector {
      */
     private final ConcurrentHashMap<String, Integer> previousCliffPosition = new ConcurrentHashMap<>();
 
+    /**
+     * 前回の単複順位乖離量を保持するキャッシュ。変化方向（拡大中/解消中）の判定に使用。
+     * キー: "URL:馬番", 値: 乖離量（単勝順位 - 複勝順位）。乖離がなくなった場合は削除。
+     */
+    private final ConcurrentHashMap<String, Integer> previousRankGap = new ConcurrentHashMap<>();
+
     /** 最新の異常検知アラートリスト（スレッドセーフ） */
     private final List<AnomalyAlertDto> latestAlerts = new CopyOnWriteArrayList<>();
 
@@ -273,6 +279,32 @@ public class OddsAnomalyDetector {
                 logger.info("【順位乖離検知】馬番={}, 馬名={}, 単勝順位={}, 複勝順位={}, ギャップ={}",
                         data.horseNumber(), data.horseName(), winRank, placeRank, gap);
             }
+
+            // 乖離の変化方向（拡大中/解消中）を判定
+            if (gap >= RANK_GAP_THRESHOLD) {
+                Integer prevGap = previousRankGap.get(key);
+                if (prevGap != null) {
+                    int gapDelta = gap - prevGap;
+                    if (gapDelta > 0) {
+                        alerts.add(new AnomalyAlertDto(
+                                data.raceName(), data.horseNumber(), data.horseName(),
+                                "順位乖離[拡大中]", (double) gapDelta,
+                                LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
+                        logger.info("【順位乖離拡大検知】馬番={}, 馬名={}, 前回ギャップ={}, 現在ギャップ={}, delta={}",
+                                data.horseNumber(), data.horseName(), prevGap, gap, gapDelta);
+                    } else if (gapDelta < 0) {
+                        alerts.add(new AnomalyAlertDto(
+                                data.raceName(), data.horseNumber(), data.horseName(),
+                                "順位乖離[解消中]", (double) Math.abs(gapDelta),
+                                LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
+                        logger.info("【順位乖離解消検知】馬番={}, 馬名={}, 前回ギャップ={}, 現在ギャップ={}, delta={}",
+                                data.horseNumber(), data.horseName(), prevGap, gap, gapDelta);
+                    }
+                }
+                previousRankGap.put(key, gap);
+            } else {
+                previousRankGap.remove(key); // 乖離解消後は前回値をクリアして次回の誤検知を防ぐ
+            }
         }
     }
 
@@ -440,6 +472,7 @@ public class OddsAnomalyDetector {
             previousSnapshots.clear();
             phaseBaselines.clear();
             previousCliffPosition.clear();
+            previousRankGap.clear();
             lastBaselineResetDate = today;
             logger.info("日付変更を検知しました。初回オッズ基準値をリセットします: {}", today);
         }
@@ -505,6 +538,7 @@ public class OddsAnomalyDetector {
         baselineWinOdds.keySet().removeIf(key -> key.startsWith(prefix));
         phaseBaselines.keySet().removeIf(key -> key.startsWith(prefix));
         previousCliffPosition.remove(url);
+        previousRankGap.keySet().removeIf(key -> key.startsWith(prefix));
         logger.info("URLの検知状態をクリアしました: {}", url);
     }
 
