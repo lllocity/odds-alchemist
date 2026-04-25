@@ -73,8 +73,8 @@ public class OddsSyncService {
                 t -> logger.info("発走時刻を取得: URL={}, 発走時刻={}", targetUrl, t),
                 () -> logger.warn("発走時刻を取得できませんでした: URL={}", targetUrl));
 
-        // 4. 異常検知を実行
-        List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsListWithUrl);
+        // 4. 異常検知を実行（発走時刻をフェーズ判定に渡す）
+        List<AnomalyAlertDto> alerts = anomalyDetector.detect(oddsListWithUrl, startTime);
         logger.info("異常検知完了: アラート件数={}", alerts.size());
 
         // 4.1. 検知されたアラートをスプレッドシートの "Alerts" シートへ永続化

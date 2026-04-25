@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,11 +65,13 @@ class OddsAnomalyDetectorTest {
                 odds("5", "中穴馬", 5.0, 2.5, 4.0)
         ));
 
-        assertThat(alerts).hasSize(1);
-        AnomalyAlertDto alert = alerts.get(0);
+        // ロジックEも同時発火するため、alertType でフィルタして検証
+        List<AnomalyAlertDto> supportAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("支持率急増")).toList();
+        assertThat(supportAlerts).hasSize(1);
+        AnomalyAlertDto alert = supportAlerts.get(0);
         assertThat(alert.horseNumber()).isEqualTo("5");
         assertThat(alert.horseName()).isEqualTo("中穴馬");
-        assertThat(alert.alertType()).isEqualTo("支持率急増");
         // 支持率増加 = 1/5.0 - 1/10.0 = 0.2 - 0.1 = 0.1
         assertThat(alert.value()).isCloseTo(0.1, org.assertj.core.data.Offset.offset(1e-9));
     }
@@ -558,6 +562,127 @@ class OddsAnomalyDetectorTest {
         // day2: 変化なし → アラートなし
         List<AnomalyAlertDto> day2Alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
         assertThat(day2Alerts.stream().filter(a -> a.alertType().equals("トレンド逸脱"))).isEmpty();
+    }
+
+    // ===== ロジックE: フェーズ別トレンド逸脱検知 =====
+
+    @Test
+    void detectPhaseDeviation_startTimeなしでMORNINGフェーズ逸脱アラートが発生すること() {
+        // Optional.empty() → MORNING フェーズ固定
+        // 1回目: 5番馬 20.0 → MORNING 基準値設定
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0));
+
+        // 2回目: 10.0 → 逸脱量 = 1/10 - 1/20 = 0.05 >= 0.05 → フェーズ逸脱[朝]
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0));
+
+        List<AnomalyAlertDto> phaseAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("フェーズ逸脱[朝]")).toList();
+        assertThat(phaseAlerts).hasSize(1);
+        assertThat(phaseAlerts.get(0).horseNumber()).isEqualTo("5");
+        assertThat(phaseAlerts.get(0).value()).isCloseTo(0.05, org.assertj.core.data.Offset.offset(1e-9));
+    }
+
+    @Test
+    void detectPhaseDeviation_PRE30フェーズで逸脱アラートが発生すること() {
+        // クロック 09:00、発走 09:20 → 残り20分 → PRE_30 フェーズ
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+        Optional<LocalTime> startTime = Optional.of(LocalTime.of(9, 20));
+
+        // 1回目: 5番馬 20.0 → PRE_30 基準値設定
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0), startTime);
+
+        // 2回目: 10.0 → 逸脱量 = 0.05 >= 0.05 → フェーズ逸脱[30分前]
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0), startTime);
+
+        List<AnomalyAlertDto> phaseAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("フェーズ逸脱[30分前]")).toList();
+        assertThat(phaseAlerts).hasSize(1);
+        assertThat(phaseAlerts.get(0).horseNumber()).isEqualTo("5");
+    }
+
+    @Test
+    void detectPhaseDeviation_PRE10フェーズで逸脱アラートが発生すること() {
+        // クロック 09:00、発走 09:05 → 残り5分 → PRE_10 フェーズ
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+        Optional<LocalTime> startTime = Optional.of(LocalTime.of(9, 5));
+
+        // 1回目: 5番馬 20.0 → PRE_10 基準値設定
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0), startTime);
+
+        // 2回目: 10.0 → フェーズ逸脱[10分前]
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0), startTime);
+
+        List<AnomalyAlertDto> phaseAlerts = alerts.stream()
+                .filter(a -> a.alertType().equals("フェーズ逸脱[10分前]")).toList();
+        assertThat(phaseAlerts).hasSize(1);
+        assertThat(phaseAlerts.get(0).horseNumber()).isEqualTo("5");
+    }
+
+    @Test
+    void detectPhaseDeviation_発走後はアラートが発生しないこと() {
+        // クロック 09:10、発走 09:05 → 残り -5分 → null → スキップ
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:10:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+        Optional<LocalTime> startTime = Optional.of(LocalTime.of(9, 5));
+
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0), startTime);
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 10.0), startTime);
+
+        assertThat(alerts.stream().filter(a -> a.alertType().startsWith("フェーズ逸脱"))).isEmpty();
+    }
+
+    @Test
+    void detectPhaseDeviation_上位3番人気はフェーズ逸脱対象外であること() {
+        // クロック 09:00、発走 09:05 → PRE_10 フェーズ
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+        Optional<LocalTime> startTime = Optional.of(LocalTime.of(9, 5));
+
+        detector.detect(List.of(
+                odds("1", "人気馬A", 2.0, 1.2, 1.5),
+                odds("2", "人気馬B", 3.0, 1.4, 2.0),
+                odds("3", "人気馬C", 4.0, 1.6, 2.5),
+                odds("5", "穴馬",   10.0, 3.0, 5.0)
+        ), startTime);
+
+        // 上位3番人気のオッズが大幅短縮してもフェーズ逸脱なし
+        List<AnomalyAlertDto> alerts = detector.detect(List.of(
+                odds("1", "人気馬A", 1.1, 1.1, 1.3),
+                odds("2", "人気馬B", 1.5, 1.2, 1.5),
+                odds("3", "人気馬C", 2.0, 1.3, 2.0),
+                odds("5", "穴馬",   10.0, 3.0, 5.0)
+        ), startTime);
+
+        assertThat(alerts.stream()
+                .filter(a -> a.alertType().startsWith("フェーズ逸脱"))
+                .map(AnomalyAlertDto::horseNumber))
+                .doesNotContain("1", "2", "3");
+    }
+
+    @Test
+    void detectPhaseDeviation_フェーズ間で基準値が独立していること() {
+        // MORNING 基準値と PRE_30 基準値は別々に管理される
+        MutableClock clock = new MutableClock(Instant.parse("2026-01-01T09:00:00Z"), ZoneOffset.UTC);
+        detector = new OddsAnomalyDetector(clock);
+
+        // MORNING フェーズ: 5番馬 20.0 で基準値登録
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 20.0));
+
+        // PRE_30 フェーズに切り替え: 5番馬 15.0 で PRE_30 基準値を別途登録
+        Optional<LocalTime> startTimePre30 = Optional.of(LocalTime.of(9, 20));
+        detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 15.0), startTimePre30);
+
+        // PRE_30 2回目: 5.0 → 逸脱量 = 1/5 - 1/15 ≈ 0.133 >= 0.05 → フェーズ逸脱[30分前]
+        List<AnomalyAlertDto> alerts = detector.detect(buildRace(1.5, 2.0, 3.0, 8.0, 5.0), startTimePre30);
+
+        // フェーズ逸脱[30分前] が発生し、フェーズ逸脱[朝] は発生しないこと
+        assertThat(alerts.stream().filter(a -> a.alertType().equals("フェーズ逸脱[30分前]"))).isNotEmpty();
+        assertThat(alerts.stream()
+                .filter(a -> a.alertType().equals("フェーズ逸脱[30分前]"))
+                .map(AnomalyAlertDto::horseNumber))
+                .contains("5");
     }
 
     // ===== ヘルパークラス =====

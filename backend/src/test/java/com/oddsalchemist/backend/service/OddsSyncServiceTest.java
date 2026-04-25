@@ -32,7 +32,7 @@ class OddsSyncServiceTest {
         sheetsService = mock(GoogleSheetsService.class);
         anomalyDetector = mock(OddsAnomalyDetector.class);
         slackNotifyClient = mock(SlackNotifyClient.class);
-        when(anomalyDetector.detect(any())).thenReturn(List.of());
+        when(anomalyDetector.detect(any(), any())).thenReturn(List.of());
         service = new OddsSyncService(scrapingService, parser, sheetsService, anomalyDetector, slackNotifyClient);
     }
 
@@ -66,7 +66,7 @@ class OddsSyncServiceTest {
         assertThat(row.get(4)).isEqualTo("キタサンブラック"); // E列: 馬名
 
         // 異常検知が呼び出されていること
-        verify(anomalyDetector).detect(any());
+        verify(anomalyDetector).detect(any(), any());
     }
 
     @Test
@@ -110,7 +110,7 @@ class OddsSyncServiceTest {
         when(parser.parse(dummyHtml)).thenReturn(List.of(
                 new OddsData("第1回東京1レース", "5", "テスト馬", 10.0, 2.0, 4.0, null)
         ));
-        when(anomalyDetector.detect(any())).thenReturn(List.of(alert));
+        when(anomalyDetector.detect(any(), any())).thenReturn(List.of(alert));
 
         service.fetchAndSaveOdds(url, range);
 

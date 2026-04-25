@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,11 +22,13 @@ import java.util.stream.Collectors;
 
 /**
  * オッズデータの異常を検知するサービス。
- * 以下の3種類の異常を検知する:
+ * 以下の5種類の異常を検知する:
  * <ul>
  *   <li>ロジックA: 支持率の急増（前回比 +2.0%以上）</li>
  *   <li>ロジックB: 単複オッズの順位乖離（ギャップ3以上）</li>
  *   <li>ロジックC: その日の初回detect()呼び出し時のオッズを基準値としたトレンド逸脱（基準比 +5.0%以上, 中穴・大穴帯）</li>
+ *   <li>ロジックD: 支持率の加速度（時間正規化、0.5%/分以上）</li>
+ *   <li>ロジックE: フェーズ別トレンド逸脱（発走までの残り時間に応じた3段階基準点）</li>
  * </ul>
  * 上位3番人気（単勝1〜3位）はノイズが大きいため検知対象から除外する。
  * 初期基準値は日次リセットされ、その日の最初の検知呼び出し時に設定される。
@@ -54,6 +57,8 @@ public class OddsAnomalyDetector {
     /** BigDecimal除算時の小数点以下桁数 */
     private static final int SUPPORT_RATE_SCALE = 10;
 
+    /** 発走までの残り時間に応じたフェーズ定義 */
+    enum Phase { MORNING, PRE_30, PRE_10 }
 
     /** 前回スナップショット（単勝オッズ＋取得時刻）を保持するインメモリキャッシュ。キー: "URL:馬番" */
     private final ConcurrentHashMap<String, OddsSnapshot> previousSnapshots = new ConcurrentHashMap<>();
@@ -64,6 +69,12 @@ public class OddsAnomalyDetector {
      * キー: "URL:馬番"
      */
     private final ConcurrentHashMap<String, Double> baselineWinOdds = new ConcurrentHashMap<>();
+
+    /**
+     * フェーズ別基準点を保持するインメモリキャッシュ。
+     * キー: "URL:馬番", 値: Phase → 基準単勝オッズ
+     */
+    private final ConcurrentHashMap<String, Map<Phase, Double>> phaseBaselines = new ConcurrentHashMap<>();
 
     /** 最新の異常検知アラートリスト（スレッドセーフ） */
     private final List<AnomalyAlertDto> latestAlerts = new CopyOnWriteArrayList<>();
@@ -86,12 +97,24 @@ public class OddsAnomalyDetector {
 
     /**
      * オッズデータリストを解析し、異常を検知してアラートリストを返します。
-     * 検知結果は内部の最新アラートリストに保存されます。
+     * 発走時刻なし（MORNING フェーズ固定）で呼び出す後方互換オーバーロード。
      *
      * @param oddsList 最新のパース済みオッズデータ
      * @return 検知されたアラートのリスト（変更不可）
      */
     public List<AnomalyAlertDto> detect(List<OddsData> oddsList) {
+        return detect(oddsList, Optional.empty());
+    }
+
+    /**
+     * オッズデータリストを解析し、異常を検知してアラートリストを返します。
+     * 検知結果は内部の最新アラートリストに保存されます。
+     *
+     * @param oddsList  最新のパース済みオッズデータ
+     * @param startTime 発走予定時刻（フェーズ判定に使用。空の場合は MORNING 固定）
+     * @return 検知されたアラートのリスト（変更不可）
+     */
+    public List<AnomalyAlertDto> detect(List<OddsData> oddsList, Optional<LocalTime> startTime) {
         // 日付変更時に初期基準値をリセット
         resetBaselineIfNewDay();
 
@@ -135,6 +158,9 @@ public class OddsAnomalyDetector {
 
             // ロジックD: 支持率の加速度検知（時間正規化）
             detectAcceleration(validList, top3Keys, now, alerts);
+
+            // ロジックE: フェーズ別トレンド逸脱検知
+            detectPhaseDeviation(validList, top3Keys, startTime, alerts);
 
             // 前回スナップショットを更新（上位3番人気を含む全有効馬）
             validList.forEach(d -> previousSnapshots.put(buildKey(d.url(), d.horseNumber()),
@@ -287,6 +313,64 @@ public class OddsAnomalyDetector {
     }
 
     /**
+     * ロジックE: フェーズ別トレンド逸脱を検知します。
+     * 発走までの残り時間に応じた3段階のフェーズ（MORNING / PRE_30 / PRE_10）ごとに
+     * 基準点を設け、同フェーズ内でのオッズ変化量を監視します。
+     * 上位3番人気を除いた全馬が対象（ロジックCの人気帯制限なし）。
+     */
+    private void detectPhaseDeviation(
+            List<OddsData> validList,
+            Set<String> top3Keys,
+            Optional<LocalTime> startTime,
+            List<AnomalyAlertDto> alerts) {
+
+        Phase phase = determinePhase(startTime);
+        if (phase == null) return; // 発走後はスキップ
+
+        for (OddsData current : validList) {
+            String key = buildKey(current.url(), current.horseNumber());
+            if (top3Keys.contains(key)) continue;
+
+            Map<Phase, Double> baselines = phaseBaselines.computeIfAbsent(key, k -> new ConcurrentHashMap<>());
+            baselines.putIfAbsent(phase, current.winOdds());
+            Double baselineOdds = baselines.get(phase);
+            if (baselineOdds == null || baselineOdds <= 0) continue;
+
+            BigDecimal deviation = toSupportRate(current.winOdds()).subtract(toSupportRate(baselineOdds));
+            if (deviation.compareTo(TREND_DEVIATION_THRESHOLD) >= 0) {
+                String alertType = switch (phase) {
+                    case MORNING -> "フェーズ逸脱[朝]";
+                    case PRE_30  -> "フェーズ逸脱[30分前]";
+                    case PRE_10  -> "フェーズ逸脱[10分前]";
+                };
+                alerts.add(new AnomalyAlertDto(
+                        current.raceName(),
+                        current.horseNumber(),
+                        current.horseName(),
+                        alertType,
+                        deviation.setScale(4, RoundingMode.HALF_UP).doubleValue(),
+                        LocalDateTime.now(clock).format(SheetsDates.FORMATTER)));
+                logger.info("【フェーズ逸脱検知】馬番={}, 馬名={}, フェーズ={}, 基準オッズ={}, 現在オッズ={}, 逸脱量={}",
+                        current.horseNumber(), current.horseName(), phase,
+                        baselineOdds, current.winOdds(), deviation);
+            }
+        }
+    }
+
+    /**
+     * 発走時刻と現在時刻からフェーズを判定します。
+     * @return MORNING / PRE_30 / PRE_10 のいずれか、発走後は null
+     */
+    private Phase determinePhase(Optional<LocalTime> startTime) {
+        if (startTime.isEmpty()) return Phase.MORNING;
+        long minutesUntilStart = ChronoUnit.MINUTES.between(LocalTime.now(clock), startTime.get());
+        if (minutesUntilStart < 0)  return null;      // 発走後
+        if (minutesUntilStart <= 10) return Phase.PRE_10;
+        if (minutesUntilStart <= 30) return Phase.PRE_30;
+        return Phase.MORNING;
+    }
+
+    /**
      * 日付が変わった場合に初期基準値をリセットします。
      * 毎日の初回スクレイピングで新たな基準値が設定されます。
      */
@@ -295,6 +379,7 @@ public class OddsAnomalyDetector {
         if (!today.equals(lastBaselineResetDate)) {
             baselineWinOdds.clear();
             previousSnapshots.clear();
+            phaseBaselines.clear();
             lastBaselineResetDate = today;
             logger.info("日付変更を検知しました。初回オッズ基準値をリセットします: {}", today);
         }
@@ -355,8 +440,10 @@ public class OddsAnomalyDetector {
      * @param url 削除対象URL
      */
     public void clearStateForUrl(String url) {
-        previousSnapshots.keySet().removeIf(key -> key.startsWith(url + ":"));
-        baselineWinOdds.keySet().removeIf(key -> key.startsWith(url + ":"));
+        String prefix = url + ":";
+        previousSnapshots.keySet().removeIf(key -> key.startsWith(prefix));
+        baselineWinOdds.keySet().removeIf(key -> key.startsWith(prefix));
+        phaseBaselines.keySet().removeIf(key -> key.startsWith(prefix));
         logger.info("URLの検知状態をクリアしました: {}", url);
     }
 
