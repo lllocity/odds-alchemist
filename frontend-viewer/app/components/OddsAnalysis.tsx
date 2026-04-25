@@ -32,21 +32,30 @@ function buildBets(horses: HorseAnalysis[]) {
   const honmei = horses.filter(h => h.verdict === '本命');
   const taikou = horses.filter(h => h.verdict === '対抗');
   const himo   = horses.filter(h => h.verdict === '3着紐');
-  if (honmei.length === 0 || taikou.length === 0) return null;
+  if (honmei.length === 0) return null;
 
-  // 馬単: 本命→対抗 と 対抗→本命 の全組み合わせ
-  const umatanPairs: [HorseAnalysis, HorseAnalysis][] = [];
-  for (const h1 of honmei) for (const h2 of taikou) {
-    umatanPairs.push([h1, h2]);
-    umatanPairs.push([h2, h1]);
+  // 三連複: 本命×対抗 軸2頭 × 3着紐 流し
+  type SanrenpukuBet = { axis1: HorseAnalysis; axis2: HorseAnalysis; himo: HorseAnalysis };
+  const sanrenpukuBets: SanrenpukuBet[] = [];
+  for (const h1 of honmei) {
+    for (const h2 of taikou) {
+      for (const h3 of himo) {
+        sanrenpukuBets.push({ axis1: h1, axis2: h2, himo: h3 });
+      }
+    }
   }
-  const umatanCount = umatanPairs.length;
 
-  // 3連単: 馬単ペア × 各紐（3着流し）
-  const sanrentanCount = umatanCount * himo.length;
-  const total = umatanCount + sanrentanCount;
+  // ワイド: 本命 × 3着紐 の全ペア
+  type WideBet = [HorseAnalysis, HorseAnalysis];
+  const wideBets: WideBet[] = [];
+  for (const h1 of honmei) {
+    for (const h2 of himo) {
+      wideBets.push([h1, h2]);
+    }
+  }
 
-  return { honmei, taikou, himo, umatanPairs, umatanCount, sanrentanCount, total };
+  const total = sanrenpukuBets.length + wideBets.length;
+  return { honmei, taikou, himo, sanrenpukuBets, wideBets, total };
 }
 
 export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; onAnalyzingChange?: (v: boolean) => void }) {
@@ -188,7 +197,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
           {(() => {
             const bets = buildBets(result.horses);
             if (!bets) return null;
-            const { himo, umatanPairs, umatanCount, sanrentanCount, total } = bets;
+            const { sanrenpukuBets, wideBets, total } = bets;
             return (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
@@ -198,35 +207,31 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
                   </p>
                 </div>
 
-                {/* 馬単 */}
-                <div className="px-3 py-2 border-b border-gray-100">
-                  <p className="text-xs font-semibold text-gray-600 mb-1">馬単（{umatanCount}口）</p>
-                  <div className="space-y-0.5">
-                    {umatanPairs.map(([first, second], i) => (
-                      <p key={i} className="text-xs text-gray-700">
-                        {first.number}番 {first.name} → {second.number}番 {second.name}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 3連単 */}
-                {himo.length > 0 && (
-                  <div className="px-3 py-2">
-                    <p className="text-xs font-semibold text-gray-600 mb-1">3連単（{sanrentanCount}口）</p>
-                    <div className="space-y-1">
-                      {umatanPairs.map(([first, second], i) => (
+                {/* 三連複 */}
+                {sanrenpukuBets.length > 0 && (
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">三連複（{sanrenpukuBets.length}口）</p>
+                    <div className="space-y-0.5">
+                      {sanrenpukuBets.map((bet, i) => (
                         <p key={i} className="text-xs text-gray-700">
-                          <span className="font-medium">{first.number}番→{second.number}番</span>
-                          {' → '}
-                          {himo.map(h => `${h.number}番`).join('・')}
-                          <span className="text-gray-400">（{himo.length}口）</span>
+                          {bet.axis1.number}番 {bet.axis1.name}・{bet.axis2.number}番 {bet.axis2.name} → {bet.himo.number}番 {bet.himo.name}
                         </p>
                       ))}
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      3着: {himo.map(h => `${h.number}番 ${h.name}`).join(' / ')}
-                    </p>
+                  </div>
+                )}
+
+                {/* ワイド */}
+                {wideBets.length > 0 && (
+                  <div className="px-3 py-2">
+                    <p className="text-xs font-semibold text-gray-600 mb-1">ワイド（{wideBets.length}口）</p>
+                    <div className="space-y-0.5">
+                      {wideBets.map(([h1, h2], i) => (
+                        <p key={i} className="text-xs text-gray-700">
+                          {h1.number}番 {h1.name} ー {h2.number}番 {h2.name}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
