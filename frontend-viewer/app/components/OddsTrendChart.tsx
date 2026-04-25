@@ -9,9 +9,17 @@ import { OddsHistoryItem, HorseOption, AlertHistoryItem, MergedChartItem } from 
 import { AlertType } from '@/app/types/oddsAlert';
 
 const ALERT_COLORS: Record<AlertType, string> = {
-  '支持率急増': '#f97316',
-  '順位乖離': '#7c3aed',
-  'トレンド逸脱': '#dc2626',
+  '支持率急増':           '#f97316', // orange
+  '支持率加速':           '#ef4444', // red
+  '順位乖離':             '#3b82f6', // blue
+  '順位乖離[拡大中]':     '#0ea5e9', // sky
+  '順位乖離[解消中]':     '#06b6d4', // cyan
+  'トレンド逸脱':         '#7c3aed', // purple
+  'フェーズ逸脱[朝]':     '#eab308', // yellow
+  'フェーズ逸脱[30分前]': '#f59e0b', // amber
+  'フェーズ逸脱[10分前]': '#f43f5e', // rose
+  'オッズ断層[凝縮]':     '#22c55e', // green
+  'オッズ断層[拡散]':     '#14b8a6', // teal
 };
 
 const MAX_HORSES = 3;
