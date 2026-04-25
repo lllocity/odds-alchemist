@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import { AnomalyAlert, AlertType } from '@/app/types/oddsAlert';
 
 /** 検知タイプごとのスタイル・説明・意図・値フォーマット設定 */
@@ -115,6 +118,8 @@ interface AlertListProps {
  * 検知タイプの凡例と、レース名・馬番・馬名・数値・検知時刻を表示する。
  */
 export default function AlertList({ alerts, lastUpdated }: AlertListProps) {
+  const [legendOpen, setLegendOpen] = useState(false);
+
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-3">
@@ -127,23 +132,33 @@ export default function AlertList({ alerts, lastUpdated }: AlertListProps) {
       </div>
 
       {/* 検知種別の凡例 */}
-      <div className="mb-4 p-3 bg-gray-50 rounded-md border border-gray-200">
-        <p className="text-xs font-semibold text-gray-600 mb-2">検知種別の説明</p>
-        <dl className="space-y-2.5">
-          {(Object.entries(ALERT_TYPE_CONFIG) as [AlertType, typeof ALERT_TYPE_CONFIG[AlertType]][]).map(
-            ([type, config]) => (
-              <div key={type} className="flex items-start gap-2 text-xs">
-                <span className={`shrink-0 font-medium px-1.5 py-0.5 rounded ${config.bg} ${config.text}`}>
-                  {config.label}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-gray-400">{config.description}</p>
-                  <p className="text-gray-600 mt-0.5">{config.intent}</p>
-                </div>
-              </div>
-            )
-          )}
-        </dl>
+      <div className="mb-4 border border-gray-200 rounded-md overflow-hidden">
+        <button
+          onClick={() => setLegendOpen(v => !v)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors"
+        >
+          <span>検知種別の説明</span>
+          <span>{legendOpen ? '▲' : '▼'}</span>
+        </button>
+        {legendOpen && (
+          <div className="p-3 bg-gray-50 border-t border-gray-200">
+            <dl className="space-y-2.5">
+              {(Object.entries(ALERT_TYPE_CONFIG) as [AlertType, typeof ALERT_TYPE_CONFIG[AlertType]][]).map(
+                ([type, config]) => (
+                  <div key={type} className="flex items-start gap-2 text-xs">
+                    <span className={`shrink-0 font-medium px-1.5 py-0.5 rounded ${config.bg} ${config.text}`}>
+                      {config.label}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-gray-400">{config.description}</p>
+                      <p className="text-gray-600 mt-0.5">{config.intent}</p>
+                    </div>
+                  </div>
+                )
+              )}
+            </dl>
+          </div>
+        )}
       </div>
 
       {alerts.length === 0 ? (
