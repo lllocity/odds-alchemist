@@ -87,6 +87,9 @@ export default function Home() {
                   <li className="text-xs text-amber-900">
                     ・単勝・複勝がともに緩やかに上がっている馬は切り候補。人気離れが進んでいるサイン。
                   </li>
+                  <li className="text-xs text-amber-900">
+                    ・AI分析はレースの5〜10分前に。
+                  </li>
                 </ul>
               </div>
 
