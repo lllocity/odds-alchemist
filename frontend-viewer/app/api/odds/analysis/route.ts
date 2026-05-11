@@ -311,7 +311,7 @@ ${alertsData}
 
 根拠が薄い・データ不足の場合は trend_evidence と trend_summary にその旨を明記してください。`;
 
-    const GEMINI_MODEL = 'gemini-3.1-flash-lite';
+    const GEMINI_MODEL = 'gemini-3-flash';
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
