@@ -133,7 +133,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
           <select
             value={selectedModel}
             onChange={e => setSelectedModel(e.target.value)}
-            disabled={isLoading || cache.has(cacheKey)}
+            disabled={isLoading}
             className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {MODELS.map(m => (
