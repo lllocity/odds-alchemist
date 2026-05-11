@@ -15,6 +15,7 @@ type AnalysisResult = {
   trend_summary: string;
   summary: string;
   confidence_score: number;
+  model: string;
 };
 
 const VERDICT_STYLES: Record<string, string> = {
@@ -23,8 +24,6 @@ const VERDICT_STYLES: Record<string, string> = {
   '3着紐': 'bg-blue-100 text-blue-800 border border-blue-200',
   '消し': 'bg-gray-100 text-gray-400 border border-gray-200',
 };
-
-const GEMINI_MODEL = 'gemini-2.5-flash';
 
 type CacheEntry = { result: AnalysisResult; analyzedAt: Date; elapsedMs: number };
 
@@ -132,7 +131,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
       <div className="flex flex-col items-end gap-0.5 mb-3 min-h-[1.25rem]">
         {analyzedAt && (
           <p className="text-xs text-gray-400">
-            {analyzedAt.toLocaleString('ja-JP')} 取得 / モデル: {GEMINI_MODEL}
+            {analyzedAt.toLocaleString('ja-JP')} 取得 / モデル: {result?.model ?? ''}
             {elapsedMs !== null && `（${(elapsedMs / 1000).toFixed(1)}秒）`}
           </p>
         )}

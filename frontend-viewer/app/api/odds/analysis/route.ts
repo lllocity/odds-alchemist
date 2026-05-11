@@ -311,9 +311,10 @@ ${alertsData}
 
 根拠が薄い・データ不足の場合は trend_evidence と trend_summary にその旨を明記してください。`;
 
+    const GEMINI_MODEL = 'gemini-3.1-flash-lite';
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-3.1-flash-lite',
+      model: GEMINI_MODEL,
       systemInstruction: systemPrompt,
       generationConfig: {
         responseMimeType: 'application/json',
@@ -325,7 +326,7 @@ ${alertsData}
     const result = await model.generateContent(userPrompt);
     const text = result.response.text();
     const parsed = JSON.parse(text);
-    return NextResponse.json(parsed);
+    return NextResponse.json({ ...parsed, model: GEMINI_MODEL });
   } catch (e) {
     console.warn('AI分析に失敗しました', e);
     return NextResponse.json({ error: 'AI分析に失敗しました' }, { status: 500 });
