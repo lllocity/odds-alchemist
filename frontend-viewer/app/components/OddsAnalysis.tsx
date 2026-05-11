@@ -25,6 +25,12 @@ const VERDICT_STYLES: Record<string, string> = {
   '消し': 'bg-gray-100 text-gray-400 border border-gray-200',
 };
 
+const MODELS = [
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+  { id: 'gemini-3.1-flash-lite',  label: 'Gemini 3.1 Flash Lite' },
+  { id: 'gemini-2.5-flash',       label: 'Gemini 2.5 Flash' },
+] as const;
+
 type CacheEntry = { result: AnalysisResult; analyzedAt: Date; elapsedMs: number };
 
 function buildBets(horses: HorseAnalysis[]) {
@@ -59,6 +65,7 @@ function buildBets(horses: HorseAnalysis[]) {
 
 export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; onAnalyzingChange?: (v: boolean) => void }) {
   const [cache, setCache] = useState<Map<string, CacheEntry>>(new Map());
+  const [selectedModel, setSelectedModel] = useState<string>(MODELS[0].id);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,15 +73,17 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
 
+  const cacheKey = `${url}:${selectedModel}`;
+
   useEffect(() => {
-    const entry = cache.get(url) ?? null;
+    const entry = cache.get(cacheKey) ?? null;
     setResult(entry?.result ?? null);
     setElapsedMs(entry?.elapsedMs ?? null);
     setAnalyzedAt(entry?.analyzedAt ?? null);
     setError(null);
     setOpenEvidence(new Set());
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url]);
+  }, [url, selectedModel]);
 
   const handleAnalyze = async () => {
     setIsLoading(true);
@@ -86,7 +95,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
     setOpenEvidence(new Set());
     const startedAt = Date.now();
     try {
-      const res = await fetch(`/api/odds/analysis?url=${encodeURIComponent(url)}`);
+      const res = await fetch(`/api/odds/analysis?url=${encodeURIComponent(url)}&model=${encodeURIComponent(selectedModel)}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error ?? `エラー: ${res.status}`);
@@ -96,7 +105,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
       const at = new Date();
       setElapsedMs(elapsed);
       setAnalyzedAt(at);
-      setCache(prev => new Map(prev).set(url, { result: data, analyzedAt: at, elapsedMs: elapsed }));
+      setCache(prev => new Map(prev).set(cacheKey, { result: data, analyzedAt: at, elapsedMs: elapsed }));
       setResult(data);
     } catch (e) {
       console.warn('AI分析の取得に失敗しました', e);
@@ -120,13 +129,25 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
     <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
       <div className="flex items-center justify-between mb-1">
         <h2 className="text-base font-semibold text-gray-800">AI オッズ分析</h2>
-        <button
-          onClick={handleAnalyze}
-          disabled={isLoading || cache.has(url)}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isLoading ? '分析中...' : 'AI分析を実行'}
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedModel}
+            onChange={e => setSelectedModel(e.target.value)}
+            disabled={isLoading || cache.has(cacheKey)}
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {MODELS.map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleAnalyze}
+            disabled={isLoading || cache.has(cacheKey)}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isLoading ? '分析中...' : 'AI分析を実行'}
+          </button>
+        </div>
       </div>
       <div className="flex flex-col items-end gap-0.5 mb-3 min-h-[1.25rem]">
         {analyzedAt && (
@@ -135,8 +156,8 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
             {elapsedMs !== null && `（${(elapsedMs / 1000).toFixed(1)}秒）`}
           </p>
         )}
-        {cache.has(url) && !isLoading && (
-          <p className="text-xs text-gray-400">再度分析する際は画面をリロードしてください</p>
+        {cache.has(cacheKey) && !isLoading && (
+          <p className="text-xs text-gray-400">再度分析する際はモデルを切り替えるか、画面をリロードしてください</p>
         )}
       </div>
 

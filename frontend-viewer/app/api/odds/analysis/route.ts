@@ -135,6 +135,9 @@ function buildAlertsData(alertRows: string[][], url: string): string {
     .join('\n');
 }
 
+const ALLOWED_MODELS = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'] as const;
+const DEFAULT_MODEL = 'gemini-3-flash-preview';
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url');
   if (!url) {
@@ -311,7 +314,8 @@ ${alertsData}
 
 根拠が薄い・データ不足の場合は trend_evidence と trend_summary にその旨を明記してください。`;
 
-    const GEMINI_MODEL = 'gemini-3-flash-preview';
+    const modelParam = req.nextUrl.searchParams.get('model') ?? DEFAULT_MODEL;
+    const GEMINI_MODEL = (ALLOWED_MODELS as readonly string[]).includes(modelParam) ? modelParam : DEFAULT_MODEL;
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
