@@ -68,30 +68,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 右カラム: 買いの掟 + AI分析 + 検知アラート */}
+            {/* 右カラム: AI分析 + 検知アラート */}
             <div className="space-y-4 sm:sticky sm:top-6">
-
-              {/* 買いの掟 */}
-              <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-4">
-                <p className="text-xs font-bold text-amber-800 mb-2 tracking-wide">⚠ 買いの掟</p>
-                <ul className="space-y-1">
-                  <li className="text-xs text-amber-900">
-                    ・オッズの動きだけ見て買うな。アラートが鳴って初めて動け。
-                  </li>
-                  <li className="text-xs text-amber-900">
-                    ・人気があり、かつ単勝オッズが緩やかに下がり続けている馬は軸候補。資金が継続して入っている証拠。
-                  </li>
-                  <li className="text-xs text-amber-900">
-                    ・複勝オッズだけが緩やかに下がっている馬は対抗候補。「飛ぶよりは来る」と見られている。
-                  </li>
-                  <li className="text-xs text-amber-900">
-                    ・単勝・複勝がともに緩やかに上がっている馬は切り候補。人気離れが進んでいるサイン。
-                  </li>
-                  <li className="text-xs text-amber-900">
-                    ・AI分析はレースの5〜10分前に。
-                  </li>
-                </ul>
-              </div>
 
               {/* AI オッズ分析（レース選択後に表示） */}
               {selectedUrl && <OddsAnalysis url={selectedUrl} onAnalyzingChange={setIsAnalyzing} />}
