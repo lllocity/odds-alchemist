@@ -129,7 +129,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
           </button>
         </div>
       </div>
-      <div className="flex flex-col items-end gap-0.5 mb-3 min-h-[1.25rem]">
+      <div className="flex flex-col items-end gap-0.5 mb-2 min-h-[1.25rem]">
         {analyzedAt && (
           <p className="text-xs text-gray-400">
             {analyzedAt.toLocaleString('ja-JP')} 取得 / モデル: {result?.model ?? ''}
@@ -140,6 +140,28 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
           <p className="text-xs text-gray-400">再度分析する際はモデルを切り替えるか、画面をリロードしてください</p>
         )}
       </div>
+
+      {/* 評価の定義 */}
+      <details className="mb-3 text-xs text-gray-500 border border-gray-100 rounded-lg bg-gray-50">
+        <summary className="px-3 py-2 cursor-pointer select-none list-none flex items-center gap-1 font-medium">
+          <span className="text-gray-400 text-[10px]">▶</span>
+          評価の定義
+        </summary>
+        <div className="px-3 pb-3 pt-1 space-y-1.5">
+          <div className="flex items-start gap-2">
+            <span className={`mt-0.5 shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${VERDICT_STYLES['軸候補']}`}>軸候補</span>
+            <span className="leading-relaxed">人気上位でも最下位でもない中穴ゾーンで、[直前] 区間のオッズが安定または下落している馬（1〜2頭）</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className={`mt-0.5 shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${VERDICT_STYLES['相手候補']}`}>相手候補</span>
+            <span className="leading-relaxed">[直前] 区間でオッズが下落傾向、またはアラートが出ている馬（3〜5頭）</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className={`mt-0.5 shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${VERDICT_STYLES['対象外']}`}>対象外</span>
+            <span className="leading-relaxed">明確な支持の根拠がない馬</span>
+          </div>
+        </div>
+      </details>
 
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>
