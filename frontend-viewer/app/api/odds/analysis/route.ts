@@ -315,7 +315,9 @@ ${supplementalSection}
 
     // ?debug=true のときは Gemini を呼ばずにプロンプト本文を返す（検証用）
     if (req.nextUrl.searchParams.get('debug') === 'true') {
-      return NextResponse.json({ systemPrompt, userPrompt });
+      const { extractRaceId } = await import('@/lib/scrapeRaceData');
+      const debugRaceId = extractRaceId(url);
+      return NextResponse.json({ systemPrompt, userPrompt, debugRaceId, supplementalSection });
     }
 
     const modelParam = req.nextUrl.searchParams.get('model') ?? DEFAULT_MODEL;
