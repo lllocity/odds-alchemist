@@ -77,6 +77,8 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
   const [openEvidence, setOpenEvidence] = useState<Set<number>>(new Set());
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [analyzedAt, setAnalyzedAt] = useState<Date | null>(null);
+  const [debugPrompt, setDebugPrompt] = useState<{ systemPrompt: string; userPrompt: string } | null>(null);
+  const [isDebugLoading, setIsDebugLoading] = useState(false);
 
   const cacheKey = `${url}:${selectedModel}`;
 
@@ -121,6 +123,21 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
     }
   };
 
+  const handleDebug = async () => {
+    setIsDebugLoading(true);
+    setDebugPrompt(null);
+    try {
+      const res = await fetch(`/api/odds/analysis?url=${encodeURIComponent(url)}&debug=true`);
+      if (!res.ok) throw new Error(`エラー: ${res.status}`);
+      const data = await res.json();
+      setDebugPrompt(data);
+    } catch (e) {
+      console.warn('プロンプト取得に失敗しました', e);
+    } finally {
+      setIsDebugLoading(false);
+    }
+  };
+
   const toggleEvidence = (num: number) => {
     setOpenEvidence(prev => {
       const next = new Set(prev);
@@ -145,6 +162,13 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
               <option key={m.id} value={m.id}>{m.label}</option>
             ))}
           </select>
+          <button
+            onClick={handleDebug}
+            disabled={isDebugLoading || isLoading}
+            className="px-3 py-2 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isDebugLoading ? '取得中...' : 'プロンプト確認'}
+          </button>
           <button
             onClick={handleAnalyze}
             disabled={isLoading || cache.has(cacheKey)}
@@ -292,6 +316,24 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
 
           {/* 推奨確度 */}
           <p className="text-right text-xs text-gray-400">推奨確度: {result.confidence_score}/100</p>
+        </div>
+      )}
+
+      {/* デバッグ: プロンプト表示エリア */}
+      {debugPrompt && (
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-500">プロンプト確認（デバッグ用）</p>
+            <button onClick={() => setDebugPrompt(null)} className="text-xs text-gray-400 hover:text-gray-600">閉じる</button>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">システムプロンプト</p>
+            <pre className="text-xs bg-gray-50 border border-gray-200 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words">{debugPrompt.systemPrompt}</pre>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">ユーザープロンプト</p>
+            <pre className="text-xs bg-gray-50 border border-gray-200 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-[600px] overflow-y-auto">{debugPrompt.userPrompt}</pre>
+          </div>
         </div>
       )}
     </div>

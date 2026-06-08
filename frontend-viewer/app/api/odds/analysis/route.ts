@@ -312,6 +312,11 @@ ${supplementalSection}
 
 根拠が薄い・データ不足の場合は trend_evidence と trend_summary にその旨を明記してください。`;
 
+    // ?debug=true のときは Gemini を呼ばずにプロンプト本文を返す（検証用）
+    if (req.nextUrl.searchParams.get('debug') === 'true') {
+      return NextResponse.json({ systemPrompt, userPrompt });
+    }
+
     const modelParam = req.nextUrl.searchParams.get('model') ?? DEFAULT_MODEL;
     const GEMINI_MODEL = (ALLOWED_MODELS as readonly string[]).includes(modelParam) ? modelParam : DEFAULT_MODEL;
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
