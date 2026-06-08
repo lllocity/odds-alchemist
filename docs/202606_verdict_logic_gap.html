@@ -1,0 +1,44 @@
+<div style="font-family: var(--font-sans, -apple-system, sans-serif); color: var(--text-primary, #1a1a1a); max-width: 760px; margin: 0 auto; line-height: 1.6;">
+<h2 class="sr-only">現状のAI買い目判定ロジックと、新しい軸＋相手戦略との間のギャップ、および修正が必要な3箇所のまとめ</h2>
+<style>
+  .section-ttl { font-size:15px; font-weight:700; margin: 24px 0 10px; border-left:4px solid var(--accent,#3b6ea5); padding-left:8px; }
+  .section-ttl:first-child { margin-top:0; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
+  th, td { border:1px solid var(--border-color,#ddd); padding:8px 10px; text-align:left; vertical-align:top;}
+  th { background:var(--surface-secondary,#f0f0f0); font-weight:600;}
+  .col-now { background: #fbeceb; }
+  .col-new { background: #eaf3ec; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:5px; font-size:11px; font-weight:600; margin-right:4px;}
+  .tag-now { background:#f3d9d6; color:#a3392f; }
+  .tag-new { background:#d3e6d6; color:#2f6b3a; }
+  .note { font-size:11.5px; color:var(--text-secondary,#777); margin-top:6px;}
+  .gap-box { border:1px solid #e0c0bd; background:#fbeceb; border-radius:8px; padding:10px 14px; font-size:12.5px; margin-bottom:14px;}
+</style>
+
+<div class="gap-box">
+<b>見つかったギャップ：</b>現状のプロンプトは「本命・対抗・3着紐・消し」という<u>三連複・ワイド前提</u>の判定体系で書かれており、出力の方向付けも「三連複・ワイドの買い目戦略」（プロンプト末尾の summary 指示）になっています。これは、今回設計した「中穴を軸に単勝・馬単・三連単で勝負し、相手はトレンド系ロジックで選ぶ」という方針とは別の前提で動いています。
+</div>
+
+<div class="section-ttl">① verdict のラベル体系を、軸/相手の役割ベースに変える</div>
+<table>
+  <tr><th style="width:30%"></th><th class="col-now">現状</th><th class="col-new">新戦略に合わせる場合</th></tr>
+  <tr><td>ラベル</td><td class="col-now"><span class="tag tag-now">本命・対抗・3着紐・消し</span><br>三連複の構成役割で分類</td><td class="col-new"><span class="tag tag-new">軸候補・相手候補・対象外</span>など<br>「単勝・馬単・三連単」での役割で分類</td></tr>
+  <tr><td>選定基準</td><td class="col-now">オッズ水準×トレンド強度の一般的な掛け合わせ</td><td class="col-new">軸＝<b>人気順位ベースの中穴ゾーン</b>（断層検知と連動）<br>相手＝<b>トレンドの強さ</b>で抽出</td></tr>
+</table>
+
+<div class="section-ttl">② アラートの扱い方を、役割で重み分けする</div>
+<table>
+  <tr><th style="width:30%"></th><th class="col-now">現状</th><th class="col-new">新戦略に合わせる場合</th></tr>
+  <tr><td>11種の扱い</td><td class="col-now">ほぼ全種を一律「買いの根拠」として評価指針に列挙</td><td class="col-new">C・D（トレンド逸脱・加速）を<b>相手選定の主軸</b>、A・E（急増・フェーズ逸脱）を<b>補強</b>として二段構成</td></tr>
+  <tr><td>B・F（順位乖離・断層）</td><td class="col-now">個別馬のverdictを動かす根拠として使用</td><td class="col-new">個別馬の評価には使わず、<b>「荒れレースかどうか」の判定専用</b>に転用（3連単サブ買いの可否判断）</td></tr>
+</table>
+
+<div class="section-ttl">③ 出力の方向付け（summary・買い目戦略）を券種ごと変える</div>
+<table>
+  <tr><th style="width:30%"></th><th class="col-now">現状</th><th class="col-new">新戦略に合わせる場合</th></tr>
+  <tr><td>想定する券種</td><td class="col-now">三連複・ワイド中心</td><td class="col-new">単勝（軸の中穴）・馬単（逆流し）・三連単（荒れレース限定のサブ）</td></tr>
+  <tr><td>summary の指示文</td><td class="col-now">「三連複・ワイドの買い目戦略の方向性」</td><td class="col-new">「軸（中穴）と相手（トレンド系）の組み合わせによる単勝・馬単・三連単の戦略」</td></tr>
+</table>
+
+<div class="note">つまり、信頼度ウィンドウ（層A/層B）の組み込みは「入力データの見せ方」の話であるのに対し、ここで挙げた3点は「そのデータから何を導き出すかという判断ロジック自体」の話です。両方を直さないと、新しい戦略は買い目には反映されません。</div>
+</div>

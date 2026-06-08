@@ -1,0 +1,63 @@
+<div style="font-family: var(--font-sans, -apple-system, sans-serif); color: var(--text-primary, #1a1a1a); max-width: 760px; margin: 0 auto; line-height: 1.6;">
+<h2 class="sr-only">信頼度ウィンドウをAI分析に組み込むための具体的な実装内容のまとめ図</h2>
+
+<style>
+  .section-ttl { font-size:15px; font-weight:700; margin: 24px 0 10px; border-left:4px solid var(--accent,#3b6ea5); padding-left:8px; }
+  .section-ttl:first-child { margin-top:0; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
+  th, td { border:1px solid var(--border-color,#ddd); padding:7px 9px; text-align:left; vertical-align:top;}
+  th { background:var(--surface-secondary,#f0f0f0); font-weight:600;}
+  .tag { display:inline-block; padding:1px 7px; border-radius:5px; font-size:11px; font-weight:600; margin-right:4px;}
+  .tag-new { background:#dde9f7; color:#2c5d8f; }
+  .tag-edit { background:#fde7d8; color:#a44a14; }
+  .tag-keep { background:#e2f0e2; color:#3a6b3a; }
+  .note { font-size:11.5px; color:var(--text-secondary,#777); margin-top:6px;}
+  .flow-row { display:flex; align-items:center; gap:6px; margin:6px 0; }
+  .flow-box { flex:1; border:1px solid var(--border-color,#ddd); border-radius:8px; padding:9px 11px; background:var(--surface-secondary,#f7f7f7); font-size:12px; }
+  .flow-arrow { color:var(--text-secondary,#999); font-size:16px; }
+  .csv-line { font-family: var(--font-mono, monospace); font-size:11px; padding:3px 0; }
+  .csv-tag-ref { color:#888; }
+  .csv-tag-main { color:#2c5d8f; font-weight:600; }
+  .step-row { display:flex; gap:8px; margin:10px 0; }
+  .step { flex:1; border:1px solid var(--border-color,#ddd); border-radius:10px; padding:11px; background:var(--surface-secondary,#f7f7f7); }
+  .step .num { display:inline-block; width:22px; height:22px; line-height:22px; border-radius:50%; background:var(--accent,#3b6ea5); color:#fff; font-size:11px; font-weight:600; text-align:center; margin-bottom:5px;}
+  .step .ttl { font-size:12.5px; font-weight:700; margin-bottom:3px; }
+  .step .sub { font-size:11px; color:var(--text-secondary,#666); }
+</style>
+
+<div class="section-ttl">① 変更箇所は3つだけ（最小構成）</div>
+<table>
+  <tr><th style="width:30%">対象</th><th style="width:18%">扱い</th><th>内容</th></tr>
+  <tr><td><code>buildHorsesData</code> 関数</td><td><span class="tag tag-edit">変更</span></td><td>各オッズ行に「層A」「層B」のラベルを付与する処理を追加</td></tr>
+  <tr><td>Geminiへの指示文（プロンプト）</td><td><span class="tag tag-edit">変更</span></td><td>「層Bを主材料、層Aは基準点として扱う」旨を一文追加</td></tr>
+  <tr><td><code>getCachedStartTime()</code></td><td><span class="tag tag-keep">流用</span></td><td>ロジックEで使用中の発走時刻キャッシュをそのまま層判定に再利用。新規取得は不要</td></tr>
+</table>
+<div class="note">新しい関数やAPIを作る必要はなく、既存の処理に「ラベル付け」を1段挟むだけの変更です。</div>
+
+<div class="section-ttl">② 処理の流れ（Before → After）</div>
+<div class="flow-row">
+  <div class="flow-box"><b>Before：</b>直近20件を時間帯の区別なく取得 → そのままGeminiへ</div>
+</div>
+<div style="text-align:center; color:var(--text-secondary,#999);">↓ ここに1段追加</div>
+<div class="flow-row">
+  <div class="flow-box" style="border-color:var(--accent,#3b6ea5);"><b>After：</b>① 発走時刻と比較し各行に層タグを付与 → ② ラベル付きでGeminiへ渡す → ③ プロンプトで「層Bを重視」と明示</div>
+</div>
+
+<div class="section-ttl">③ Geminiに渡すデータのイメージ</div>
+<div style="border:1px solid var(--border-color,#ddd); border-radius:8px; padding:10px 14px; background:var(--surface-secondary,#f7f7f7);">
+<div class="csv-line csv-tag-ref">13:50, 8.2, 3.1, 4.0, ... <span class="tag" style="background:#e4e4e4;color:#555;">[参考]</span> ← 層A：基準点として保持</div>
+<div class="csv-line csv-tag-ref">14:35, 7.8, 2.9, 3.8, ... <span class="tag" style="background:#e4e4e4;color:#555;">[参考]</span></div>
+<div class="csv-line csv-tag-main">14:42, 7.1, 2.6, 3.5, ... <span class="tag tag-new">[直前]</span> ← 層B：判断の主材料</div>
+<div class="csv-line csv-tag-main">14:48, 6.5, 2.4, 3.2, ... <span class="tag tag-new">[直前]</span> *支持率急増</div>
+</div>
+<div class="note">既存の「*アラート種別」のマーカーと同じ要領で、行ごとに層タグを文字列に埋め込むだけ。表示形式の大枠は変えません。</div>
+
+<div class="section-ttl">④ 進め方（3ステップ・小さく試せる順）</div>
+<div class="step-row">
+  <div class="step"><div class="num">1</div><div class="ttl">層タグ付けの実装</div><div class="sub"><code>buildHorsesData</code> に発走時刻との比較処理を追加し、ラベルを付与するだけ。表示や計算ロジックは変えない</div></div>
+  <div class="step"><div class="num">2</div><div class="ttl">プロンプト文言の調整</div><div class="sub">「層Bを主材料、層Aは基準点」という一文を指示文に追加</div></div>
+  <div class="step"><div class="num">3</div><div class="ttl">実レースで試し読み</div><div class="sub">実際の分析結果を見て、AIの言及の重みづけが意図通りに変わっているかを確認・微調整</div></div>
+</div>
+<div class="note">①②は数十行程度の小さな変更で完結する見込みです。③で結果を見ながら、必要ならプロンプトの文言だけを微調整していく形が、リスクを抑えつつ進められると思います。</div>
+
+</div>

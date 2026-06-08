@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 type HorseAnalysis = {
   number: number;
   name: string;
-  verdict: '本命' | '対抗' | '3着紐' | '消し';
+  verdict: '軸候補' | '相手候補' | '対象外';
   comment: string;
   trend_evidence: string;
 };
@@ -16,13 +16,14 @@ type AnalysisResult = {
   summary: string;
   confidence_score: number;
   model: string;
+  is_chaotic_race: boolean;
+  chaotic_note: string;
 };
 
 const VERDICT_STYLES: Record<string, string> = {
-  '本命': 'bg-red-100 text-red-800 border border-red-200',
-  '対抗': 'bg-orange-100 text-orange-800 border border-orange-200',
-  '3着紐': 'bg-blue-100 text-blue-800 border border-blue-200',
-  '消し': 'bg-gray-100 text-gray-400 border border-gray-200',
+  '軸候補':   'bg-emerald-100 text-emerald-800 border border-emerald-200',
+  '相手候補': 'bg-blue-100 text-blue-800 border border-blue-200',
+  '対象外':   'bg-gray-100 text-gray-400 border border-gray-200',
 };
 
 const MODELS = [
@@ -33,34 +34,38 @@ const MODELS = [
 
 type CacheEntry = { result: AnalysisResult; analyzedAt: Date; elapsedMs: number };
 
-function buildBets(horses: HorseAnalysis[]) {
-  const honmei = horses.filter(h => h.verdict === '本命');
-  const taikou = horses.filter(h => h.verdict === '対抗');
-  const himo   = horses.filter(h => h.verdict === '3着紐');
-  if (honmei.length === 0) return null;
+function buildBets(horses: HorseAnalysis[], isChaoticRace: boolean) {
+  const jiku = horses.filter(h => h.verdict === '軸候補');
+  const aite = horses.filter(h => h.verdict === '相手候補');
+  if (jiku.length === 0) return null;
 
-  // 三連複: 本命×対抗 軸2頭 × 3着紐 流し
-  type SanrenpukuBet = { axis1: HorseAnalysis; axis2: HorseAnalysis; himo: HorseAnalysis };
-  const sanrenpukuBets: SanrenpukuBet[] = [];
-  for (const h1 of honmei) {
-    for (const h2 of taikou) {
-      for (const h3 of himo) {
-        sanrenpukuBets.push({ axis1: h1, axis2: h2, himo: h3 });
+  // 単勝: 軸候補の馬全員
+  const tansho = jiku;
+
+  // 馬単（逆流し）: 軸候補1着 × 相手候補2着 の全組み合わせ
+  type UmatanBet = { first: HorseAnalysis; second: HorseAnalysis };
+  const umatan: UmatanBet[] = [];
+  for (const j of jiku) {
+    for (const a of aite) {
+      umatan.push({ first: j, second: a });
+    }
+  }
+
+  // 三連単: 荒れレース判定時のみ。軸候補1着 → 相手候補2・3着の流し
+  type SanrentanBet = { first: HorseAnalysis; second: HorseAnalysis; third: HorseAnalysis };
+  const sanrentan: SanrentanBet[] = [];
+  if (isChaoticRace && aite.length >= 2) {
+    for (const j of jiku) {
+      for (let i = 0; i < aite.length; i++) {
+        for (let k = i + 1; k < aite.length; k++) {
+          sanrentan.push({ first: j, second: aite[i], third: aite[k] });
+        }
       }
     }
   }
 
-  // ワイド: 本命 × 3着紐 の全ペア
-  type WideBet = [HorseAnalysis, HorseAnalysis];
-  const wideBets: WideBet[] = [];
-  for (const h1 of honmei) {
-    for (const h2 of himo) {
-      wideBets.push([h1, h2]);
-    }
-  }
-
-  const total = sanrenpukuBets.length + wideBets.length;
-  return { honmei, taikou, himo, sanrenpukuBets, wideBets, total };
+  const total = tansho.length + umatan.length + sanrentan.length;
+  return { tansho, umatan, sanrentan, total };
 }
 
 export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; onAnalyzingChange?: (v: boolean) => void }) {
@@ -171,6 +176,14 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
 
       {result && (
         <div className="space-y-4">
+          {/* 荒れレース判定バナー */}
+          {result.is_chaotic_race && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-xs font-bold text-amber-800">⚠ 荒れレースシグナルあり — 三連単サブ買いを検討</p>
+              <p className="text-xs text-amber-700 mt-1">{result.chaotic_note}</p>
+            </div>
+          )}
+
           {/* 推移分析サマリー */}
           <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
             <p className="text-xs font-bold text-indigo-800 mb-1 tracking-wide">推移分析</p>
@@ -183,7 +196,7 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
               <div key={horse.number} className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="flex items-start gap-3 px-3 py-2">
                   <span
-                    className={`mt-0.5 shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${VERDICT_STYLES[horse.verdict] ?? VERDICT_STYLES['注目']}`}
+                    className={`mt-0.5 shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${VERDICT_STYLES[horse.verdict] ?? VERDICT_STYLES['対象外']}`}
                   >
                     {horse.verdict}
                   </span>
@@ -215,9 +228,9 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
 
           {/* 買い目推奨 */}
           {(() => {
-            const bets = buildBets(result.horses);
+            const bets = buildBets(result.horses, result.is_chaotic_race);
             if (!bets) return null;
-            const { sanrenpukuBets, wideBets, total } = bets;
+            const { tansho, umatan, sanrentan, total } = bets;
             return (
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
@@ -227,28 +240,42 @@ export default function OddsAnalysis({ url, onAnalyzingChange }: { url: string; 
                   </p>
                 </div>
 
-                {/* 三連複 */}
-                {sanrenpukuBets.length > 0 && (
+                {/* 単勝 */}
+                {tansho.length > 0 && (
                   <div className="px-3 py-2 border-b border-gray-100">
-                    <p className="text-xs font-semibold text-gray-600 mb-1">三連複（{sanrenpukuBets.length}口）</p>
+                    <p className="text-xs font-semibold text-gray-600 mb-1">単勝（{tansho.length}口）</p>
                     <div className="space-y-0.5">
-                      {sanrenpukuBets.map((bet, i) => (
-                        <p key={i} className="text-xs text-gray-700">
-                          {bet.axis1.number}番 {bet.axis1.name}・{bet.axis2.number}番 {bet.axis2.name} → {bet.himo.number}番 {bet.himo.name}
+                      {tansho.map(h => (
+                        <p key={h.number} className="text-xs text-gray-700">
+                          {h.number}番 {h.name}
                         </p>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* ワイド */}
-                {wideBets.length > 0 && (
-                  <div className="px-3 py-2">
-                    <p className="text-xs font-semibold text-gray-600 mb-1">ワイド（{wideBets.length}口）</p>
+                {/* 馬単 */}
+                {umatan.length > 0 && (
+                  <div className={`px-3 py-2 ${sanrentan.length > 0 ? 'border-b border-gray-100' : ''}`}>
+                    <p className="text-xs font-semibold text-gray-600 mb-1">馬単 逆流し（{umatan.length}口）</p>
                     <div className="space-y-0.5">
-                      {wideBets.map(([h1, h2], i) => (
+                      {umatan.map((bet, i) => (
                         <p key={i} className="text-xs text-gray-700">
-                          {h1.number}番 {h1.name} ー {h2.number}番 {h2.name}
+                          {bet.first.number}番 {bet.first.name} → {bet.second.number}番 {bet.second.name}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 三連単（荒れレース時のみ） */}
+                {sanrentan.length > 0 && (
+                  <div className="px-3 py-2">
+                    <p className="text-xs font-semibold text-amber-700 mb-1">三連単 流し・荒れ対応（{sanrentan.length}口）</p>
+                    <div className="space-y-0.5">
+                      {sanrentan.map((bet, i) => (
+                        <p key={i} className="text-xs text-gray-700">
+                          {bet.first.number}番 {bet.first.name} → {bet.second.number}番 {bet.second.name} → {bet.third.number}番 {bet.third.name}
                         </p>
                       ))}
                     </div>

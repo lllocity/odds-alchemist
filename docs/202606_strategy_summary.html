@@ -1,0 +1,83 @@
+<div style="font-family: var(--font-sans, -apple-system, sans-serif); color: var(--text-primary, #1a1a1a); max-width: 760px; margin: 0 auto; line-height: 1.6;">
+<h2 class="sr-only">これまでの議論の流れと、今後の予想戦略・運用方針のまとめ図</h2>
+
+<style>
+  .stage-row { display:flex; gap:8px; margin: 16px 0; }
+  .stage { flex:1; border:1px solid var(--border-color,#ddd); border-radius:10px; padding:12px 10px; background:var(--surface-secondary,#f7f7f7); text-align:center; }
+  .stage .num { display:inline-block; width:24px; height:24px; line-height:24px; border-radius:50%; background:var(--accent,#3b6ea5); color:#fff; font-size:12px; font-weight:600; margin-bottom:6px; }
+  .stage .ttl { font-size:13px; font-weight:600; margin-bottom:4px; }
+  .stage .sub { font-size:11.5px; color:var(--text-secondary,#666); }
+  .arrow { display:flex; align-items:center; color:var(--text-secondary,#999); font-size:18px; padding: 0 2px;}
+  .section-ttl { font-size:15px; font-weight:700; margin: 28px 0 10px; border-left:4px solid var(--accent,#3b6ea5); padding-left:8px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
+  th, td { border:1px solid var(--border-color,#ddd); padding:7px 9px; text-align:left; vertical-align:top;}
+  th { background:var(--surface-secondary,#f0f0f0); font-weight:600; width:22%;}
+  .tag { display:inline-block; padding:1px 7px; border-radius:5px; font-size:11px; font-weight:600; margin-right:4px;}
+  .tag-axis { background:#fde7d8; color:#a44a14; }
+  .tag-partner { background:#dde9f7; color:#2c5d8f; }
+  .tag-main { background:var(--accent,#3b6ea5); color:#fff; }
+  .tag-sub { background:#e4e4e4; color:#555; }
+  .flow-box { border:1px solid var(--border-color,#ddd); border-radius:10px; padding:12px; background:var(--surface-secondary,#f7f7f7); }
+  .flow-title { font-size:12.5px; font-weight:700; margin-bottom:6px; }
+  .flow-item { font-size:12px; margin:3px 0; }
+  .center-arrow { text-align:center; color:var(--text-secondary,#999); font-size:20px; margin: 4px 0;}
+  .note { font-size:11.5px; color:var(--text-secondary,#777); margin-top:6px;}
+</style>
+
+<div class="section-ttl">① ここまでの流れ（4段階）</div>
+<div class="stage-row">
+  <div class="stage"><div class="num">1</div><div class="ttl">限界への気づき</div><div class="sub">オッズだけでは心もとない</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="num">2</div><div class="ttl">追加データの取捨選択</div><div class="sub">出馬表・前走情報など3〜5ページに絞り込み</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="num">3</div><div class="ttl">予想の組み方を設計</div><div class="sub">軸＋相手の戦略骨子</div></div>
+  <div class="arrow">→</div>
+  <div class="stage"><div class="num">4</div><div class="ttl">運用ルールの詰め</div><div class="sub">信頼度・ロジック選別・データ保持</div></div>
+</div>
+<div class="note">※ ②③④が「現在地」＝今回まとめた設計の中身です。</div>
+
+<div class="section-ttl">② 馬券構成イメージ：軸 ＋ 相手</div>
+<div style="display:flex; gap:14px; align-items:stretch;">
+  <div class="flow-box" style="flex:1;">
+    <div class="flow-title"><span class="tag tag-axis">軸</span>中穴ゾーンの馬</div>
+    <div class="flow-item">・人気馬でも大穴でもない中間帯</div>
+    <div class="flow-item">・固定オッズ幅ではなく<b>人気順位／断層位置</b>で動的に定義</div>
+    <div class="flow-item">・既存ロジックF（オッズ断層検知）を活用</div>
+    <div class="flow-item" style="margin-top:6px; color:var(--text-secondary,#777);">→ 単勝・馬単・三連単の軸に</div>
+  </div>
+  <div class="center-arrow" style="display:flex; align-items:center;">＋</div>
+  <div class="flow-box" style="flex:1;">
+    <div class="flow-title"><span class="tag tag-partner">相手</span>勢い上昇中の馬</div>
+    <div class="flow-item">・オッズの動き（トレンド）から抽出</div>
+    <div class="flow-item"><span class="tag tag-main">主</span>C：トレンド逸脱／D：支持率加速</div>
+    <div class="flow-item"><span class="tag tag-sub">補強</span>A：支持率急増／E：フェーズ別逸脱</div>
+    <div class="flow-item" style="margin-top:6px; color:var(--text-secondary,#777);">→ 馬単・三連単で軸に絡める相手に</div>
+  </div>
+</div>
+<div class="note">B（順位乖離）・F（断層変化）は個別馬の評価ではなく「レース全体が荒れそうか」の判定に別枠で利用。</div>
+
+<div class="section-ttl">③ 信頼度ウィンドウ（いつのデータをどう使うか）</div>
+<table>
+  <tr><th>層</th><th>時間帯</th><th>役割</th></tr>
+  <tr><td><b>層A</b>（参照用）</td><td>発走1時間以上前〜朝</td><td>判断には使わず、「そこからどれだけ動いたか」を測る<b>基準点・トレンド計算の起点</b></td></tr>
+  <tr><td><b>層B</b>（主材料）</td><td>発走1時間前〜締切直前</td><td>軸・相手の<b>意思決定の主な根拠</b>とする時間帯</td></tr>
+</table>
+<div class="note">既存ロジックE（朝／30分前／10分前のフェーズ概念）を、予想ロジックの信頼度判定にも応用したもの。</div>
+
+<div class="section-ttl">④ アラートロジックの役割分担（11種 → 目的別に整理）</div>
+<table>
+  <tr><th>グループ</th><th>該当ロジック</th><th>使いどころ</th></tr>
+  <tr><td>個別馬の評価変化</td><td>A・C・D・E<br><span style="color:var(--text-secondary,#777); font-size:11px;">支持率急増／トレンド逸脱／加速／フェーズ逸脱</span></td><td><b>相手選定</b>に使用。C・Dを主軸、A・Eは確度の補強として二段構成</td></tr>
+  <tr><td>レース全体の性質</td><td>B・F<br><span style="color:var(--text-secondary,#777); font-size:11px;">順位乖離／断層変化</span></td><td>個別馬ではなく<b>「荒れレースかどうか」の判定</b>に利用（3連単サブ買いの可否判断など）</td></tr>
+</table>
+
+<div class="section-ttl">⑤ データ保持ポリシー</div>
+<table>
+  <tr><th>原則</th><td>戦略を検証できる期間（数カ月分目安）は手動削除しない。削除する場合は事前にCSV等へ退避</td></tr>
+  <tr><th>最低限残す項目</th><td>① 最終オッズ　② 主要アラートの発生有無　③ 着順（結果）</td></tr>
+</table>
+
+<div class="note" style="margin-top:18px; padding-top:10px; border-top:1px solid var(--border-color,#ddd);">
+※ ②〜④の戦略は現時点では<b>「初期仮説」</b>であり、実績による検証はこれから。docs/context.md にも「未検証」と明記し、データが貯まった時点で再評価する前提で進めています。
+</div>
+</div>
