@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getOddsData, getAlerts } from '@/lib/sheets';
+import { fetchSupplementalSection } from '@/lib/scrapeRaceData';
 
 export const maxDuration = 60;
 
@@ -168,7 +169,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [oddsRows, alertRows] = await Promise.all([getOddsData(), getAlerts()]);
+    const [oddsRows, alertRows, supplementalSection] = await Promise.all([
+      getOddsData(),
+      getAlerts(),
+      fetchSupplementalSection(url),
+    ]);
 
     const urlRows = oddsRows.filter(row => row[1] === url);
     if (urlRows.length === 0) {
@@ -247,6 +252,8 @@ ${horsesData}
 
 ${alertsData}
 ※ アラートが無い場合は「なし」
+
+${supplementalSection}
 
 ## 分析指示
 上記データから、オッズの推移軌跡・モメンタム・馬間の資金移動を多角的に分析し、以下のJSON形式で出力してください。
