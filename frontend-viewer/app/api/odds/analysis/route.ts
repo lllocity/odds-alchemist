@@ -118,11 +118,12 @@ function buildHorsesData(oddsRows: string[][], url: string, alertRows: string[][
       const alertMatch = alerts.find(a => a.time === r.time);
       const alertSuffix = alertMatch ? ` *${alertMatch.type}` : '';
 
-      // 前レコードとの時刻差で層A/B を判定（≥20分→[参考]、<20分→[直前]）
+      // 前レコードとの時刻差で層A/B を判定（≥20分 or 負数→[参考]、0〜19分→[直前]）
+      // 負の差分は朝データが午後データの後ろに並んだケース（タイムスタンプが逆転）
       const diff = (r.detectedAtMinutes !== null && prevMinutes !== null)
         ? r.detectedAtMinutes - prevMinutes
         : null;
-      const layerTag = (diff === null || diff >= 20) ? '[参考]' : '[直前]';
+      const layerTag = (diff === null || diff < 0 || diff >= 20) ? '[参考]' : '[直前]';
 
       lines.push(
         `${r.time},${r.winOdds?.toFixed(1) ?? '-'},${r.placeMin?.toFixed(1) ?? '-'},${r.placeMax?.toFixed(1) ?? '-'},${cumRate},${velStr},${placeVelStr}${alertSuffix} ${layerTag}`

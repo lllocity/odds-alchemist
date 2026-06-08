@@ -32,9 +32,14 @@ async function fetchHtml(url: string): Promise<string> {
   return res.text();
 }
 
+// "496(+4)" "496(-14)" "496(0)" "496(-)" に対応
 function parseWeight(s: string): { weight: number | null; weightDiff: number | null } {
-  const m = s.match(/(\d{3,4})\(([+-]\d+)\)/);
-  if (m) return { weight: +m[1], weightDiff: +m[2] };
+  const withSign = s.match(/(\d{3,4})\(([+-]\d+)\)/);
+  if (withSign) return { weight: +withSign[1], weightDiff: +withSign[2] };
+  const zero = s.match(/(\d{3,4})\(0\)/);
+  if (zero) return { weight: +zero[1], weightDiff: 0 };
+  const noPrev = s.match(/(\d{3,4})\(-\)/);
+  if (noPrev) return { weight: +noPrev[1], weightDiff: null };
   const n = +s.trim();
   return { weight: (!isNaN(n) && n >= 300 && n <= 700) ? n : null, weightDiff: null };
 }
@@ -46,21 +51,40 @@ function parseStat(s: string): DistanceStat | null {
   return { wins: +m[1], second: +m[2], third: +m[3], other: +m[4] };
 }
 
-// th 要素のテキストから列インデックスマップを構築
-function buildColMap(ths: string[]): Record<string, number> {
+// th または td のテキストから列インデックスマップを構築（includes マッチで柔軟に対応）
+function buildColMap(headers: string[]): Record<string, number> {
   const map: Record<string, number> = {};
-  ths.forEach((t, i) => {
-    const text = t.trim();
-    if (text === '馬番') map.horseNum = i;
-    if (text === '馬名') map.horseName = i;
-    if (text === '騎手' || text === '騎手名') map.jockey = i;
-    if (text === '馬体重') map.weight = i;
-    if (text.startsWith('前走') && text.includes('レース')) map.prevRace = i;
-    if (text.startsWith('前走') && text.includes('着')) map.prevResult = i;
-    // 距離列: "芝1600m" "ダ1200m" など
-    if (/^[芝ダ][1-9]\d{3}m$/.test(text)) map[text] = i;
+  headers.forEach((raw, i) => {
+    const t = raw.replace(/[\s　]/g, ''); // 半角・全角スペースを除去
+    if (t.includes('馬番') && !t.includes('馬名')) map.horseNum = i;
+    if (t.includes('馬名') && !t.includes('馬番') && !t.includes('母')) map.horseName = i;
+    if (t.includes('騎手')) map.jockey = i;
+    if (t.includes('馬体重')) map.weight = i;
+    if (t.includes('前走') && t.includes('レース')) map.prevRace = i;
+    if (t.includes('前走') && (t.includes('着') || t.includes('結果'))) map.prevResult = i;
+    // 距離列: "芝1600m" "ダ1200m" など（全角ｍも考慮）
+    if (/^[芝ダ][1-9]\d{3}[mｍ]$/.test(t)) map[t.replace('ｍ', 'm')] = i;
   });
   return map;
+}
+
+// th → td の順でヘッダー行を探してcolMapを返す
+function detectColMap(rows: ReturnType<typeof parse>['querySelectorAll'] extends (s: string) => infer R ? R : never): Record<string, number> {
+  for (const row of rows) {
+    // th 優先
+    const ths = row.querySelectorAll('th');
+    if (ths.length >= 4) {
+      const m = buildColMap(ths.map(h => h.text.trim()));
+      if ('horseNum' in m) return m;
+    }
+    // td でも試みる（Yahoo Sports は td を header として使う場合がある）
+    const tds = row.querySelectorAll('td');
+    if (tds.length >= 4) {
+      const m = buildColMap(tds.map(h => h.text.trim()));
+      if ('horseNum' in m) return m;
+    }
+  }
+  return {};
 }
 
 /** 基本出馬表から馬番・馬名・騎手・馬体重を取得 */
@@ -72,7 +96,13 @@ async function fetchBasicDenma(raceId: string): Promise<{
   const html = await fetchHtml(`${YAHOO_BASE}/denma/${raceId}`);
   const root = parse(html);
 
-  const raceDistance = root.text.match(/[芝ダ][1-9]\d{3}m/)?.[0] ?? '';
+  // ページ全文からレース距離を抽出（複数パターンに対応）
+  const text = root.text;
+  const distanceMatch =
+    text.match(/[芝ダ]\s*[1-9]\d{3}\s*[mｍ]/) ||
+    text.match(/[1-9]\d{3}\s*[mｍ][（(][芝ダ]/);
+  const raceDistance = (distanceMatch?.[0] ?? '').replace(/\s+/g, '').replace('ｍ', 'm');
+
   const horses = new Map<string, HorseInfo>();
   const nameToNumber = new Map<string, string>();
 
@@ -80,14 +110,7 @@ async function fetchBasicDenma(raceId: string): Promise<{
     const rows = table.querySelectorAll('tr');
     if (rows.length < 3) continue;
 
-    // ヘッダー行から列インデックスを特定
-    let colMap: Record<string, number> = {};
-    for (const row of rows) {
-      const ths = row.querySelectorAll('th');
-      if (ths.length < 4) continue;
-      colMap = buildColMap(ths.map(h => h.text.trim()));
-      if ('horseNum' in colMap) break;
-    }
+    const colMap = detectColMap(rows);
     if (!('horseNum' in colMap)) continue;
 
     for (const row of rows) {
@@ -95,12 +118,33 @@ async function fetchBasicDenma(raceId: string): Promise<{
       if (tds.length < 5) continue;
       const texts = tds.map(c => c.text.trim().replace(/\s+/g, ' '));
 
-      const hn = texts[colMap.horseNum] ?? '';
+      // 馬番を特定（colMap 優先、なければ先頭5列のパターンマッチ）
+      let hnCol: number;
+      if ('horseNum' in colMap) {
+        hnCol = colMap.horseNum;
+      } else {
+        hnCol = texts.findIndex((t, i) => i < 5 && /^\d{1,2}$/.test(t) && +t >= 1 && +t <= 18);
+      }
+      if (hnCol < 0) continue;
+
+      const hn = texts[hnCol] ?? '';
       if (!/^\d{1,2}$/.test(hn) || +hn < 1 || +hn > 18 || horses.has(hn)) continue;
 
-      const horseName = 'horseName' in colMap ? (texts[colMap.horseName] ?? '') : '';
-      const jockey = 'jockey' in colMap ? (texts[colMap.jockey] ?? '') : '';
-      const { weight, weightDiff } = parseWeight('weight' in colMap ? (texts[colMap.weight] ?? '') : '');
+      // 馬名・騎手・馬体重: colMap 優先、なければ馬番列からの相対位置で取得
+      // 列構成: 枠(0), 馬番(1), 馬名(2), 性齢(3), 騎手(4), 斤量(5), 調教師(6), 父(7), 母(8), 馬体重(9), 人気(10)
+      const horseName = ('horseName' in colMap)
+        ? (texts[colMap.horseName] ?? '')
+        : (hnCol + 1 < texts.length ? texts[hnCol + 1] : '');
+
+      const jockey = ('jockey' in colMap)
+        ? (texts[colMap.jockey] ?? '')
+        : (hnCol + 3 < texts.length ? texts[hnCol + 3] : '');
+
+      const weightRaw = ('weight' in colMap)
+        ? (texts[colMap.weight] ?? '')
+        : (hnCol + 8 < texts.length ? texts[hnCol + 8] : '');
+
+      const { weight, weightDiff } = parseWeight(weightRaw);
 
       const info: HorseInfo = { horseNumber: hn, horseName, jockey, weight, weightDiff, prevRaceName: '', prevRaceResult: '' };
       horses.set(hn, info);
@@ -122,13 +166,7 @@ async function mergeDetailDenma(raceId: string, horses: Map<string, HorseInfo>):
     const rows = table.querySelectorAll('tr');
     if (rows.length < 3) continue;
 
-    let colMap: Record<string, number> = {};
-    for (const row of rows) {
-      const ths = row.querySelectorAll('th');
-      if (ths.length < 4) continue;
-      colMap = buildColMap(ths.map(h => h.text.trim()));
-      if ('horseNum' in colMap) break;
-    }
+    const colMap = detectColMap(rows);
     if (!('horseNum' in colMap)) continue;
 
     for (const row of rows) {
@@ -136,20 +174,40 @@ async function mergeDetailDenma(raceId: string, horses: Map<string, HorseInfo>):
       if (tds.length < 4) continue;
       const texts = tds.map(c => c.text.trim().replace(/\s+/g, ' '));
 
-      const hn = texts[colMap.horseNum] ?? '';
-      const info = horses.get(hn);
+      let hnCol: number;
+      if ('horseNum' in colMap) {
+        hnCol = colMap.horseNum;
+      } else {
+        hnCol = texts.findIndex((t, i) => i < 3 && /^\d{1,2}$/.test(t) && +t >= 1 && +t <= 18);
+      }
+      if (hnCol < 0) continue;
+
+      const info = horses.get(texts[hnCol] ?? '');
       if (!info) continue;
 
+      // 前走レース・着順: colMap 優先、なければ相対位置（馬番+5, 馬番+6）
+      // 列構成: 馬番(0), 馬名(1), 馬体重(2), 騎手(3), 斤量(4), 前走レース(5), 前走着順(6)
       if ('prevRace' in colMap && texts[colMap.prevRace]) info.prevRaceName = texts[colMap.prevRace];
       if ('prevResult' in colMap && texts[colMap.prevResult]) info.prevRaceResult = texts[colMap.prevResult];
 
-      // ヘッダーで列が特定できない場合はテキストパターンで補完
+      if (!info.prevRaceName && hnCol + 5 < texts.length) {
+        const candidate = texts[hnCol + 5];
+        if (candidate && candidate.length >= 3 && !candidate.includes('着') && !/^\d/.test(candidate)) {
+          info.prevRaceName = candidate;
+        }
+      }
+      if (!info.prevRaceResult && hnCol + 6 < texts.length) {
+        const candidate = texts[hnCol + 6];
+        if (candidate && /^\d{1,2}着$/.test(candidate)) info.prevRaceResult = candidate;
+      }
+
+      // フォールバック: テキストパターンスキャン
       if (!info.prevRaceResult || !info.prevRaceName) {
-        for (const text of texts) {
-          if (!info.prevRaceResult && /^\d{1,2}着$/.test(text)) info.prevRaceResult = text;
-          if (!info.prevRaceName && text.length >= 4 && !text.includes('着') && !/^\d/.test(text)) {
-            if (/\(G[I123V]+\)/.test(text) || (/[ァ-ヶ一-龥]/.test(text) && /[杯典賞Cカップ]/.test(text))) {
-              info.prevRaceName = text;
+        for (const t of texts) {
+          if (!info.prevRaceResult && /^\d{1,2}着$/.test(t)) info.prevRaceResult = t;
+          if (!info.prevRaceName && t.length >= 4 && !t.includes('着') && !/^\d/.test(t)) {
+            if (/\(G[I123V]+\)/.test(t) || (/[ァ-ヶ一-龥]/.test(t) && /[杯典賞Cカップ]/.test(t))) {
+              info.prevRaceName = t;
             }
           }
         }
@@ -177,24 +235,18 @@ async function fetchDistanceStats(
     const rows = table.querySelectorAll('tr');
     if (rows.length < 3) continue;
 
-    let colMap: Record<string, number> = {};
-    for (const row of rows) {
-      const ths = row.querySelectorAll('th');
-      if (ths.length < 3) continue;
-      colMap = buildColMap(ths.map(h => h.text.trim()));
-      if ('horseNum' in colMap && raceDistance in colMap) break;
-    }
-    if (!('horseNum' in colMap) || !(raceDistance in colMap)) continue;
+    const colMap = detectColMap(rows);
+    const distCol = colMap[raceDistance] ?? -1;
+    if (!('horseNum' in colMap) || distCol < 0) continue;
 
-    const distCol = colMap[raceDistance];
     for (const row of rows) {
       const tds = row.querySelectorAll('td');
       if (tds.length <= distCol) continue;
       const texts = tds.map(c => c.text.trim().replace(/\s+/g, ''));
 
       let hn = texts[colMap.horseNum] ?? '';
-      // 馬番で特定できない場合は馬名で補完
       if (!hn || !/^\d{1,2}$/.test(hn)) {
+        // 馬名で補完
         const nameText = 'horseName' in colMap ? texts[colMap.horseName] : '';
         hn = nameToNumber.get(nameText) ?? '';
       }
@@ -229,7 +281,8 @@ function buildSection(
     parts.push(`前走: ${prev || '不明'}`);
 
     if (h.weight !== null) {
-      const diff = h.weightDiff == null || h.weightDiff === 0 ? '変化なし'
+      const diff = h.weightDiff == null ? '前走データなし'
+        : h.weightDiff === 0 ? '変化なし'
         : h.weightDiff > 0 ? `+${h.weightDiff}kg` : `${h.weightDiff}kg`;
       parts.push(`馬体重: ${h.weight}kg（${diff}）`);
     }
@@ -258,7 +311,6 @@ export async function fetchSupplementalSection(oddsUrl: string): Promise<string>
     const { raceDistance, horses, nameToNumber } = await fetchBasicDenma(raceId);
     if (horses.size === 0) return '';
 
-    // 詳細出馬表と距離別成績を並列取得
     const [distanceStats] = await Promise.all([
       fetchDistanceStats(raceId, raceDistance, nameToNumber).catch(e => {
         console.warn('距離別成績の取得に失敗しました', e);
