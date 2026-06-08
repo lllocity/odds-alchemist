@@ -320,6 +320,14 @@ ${supplementalSection}
       return NextResponse.json({ systemPrompt, userPrompt, debugRaceId, supplementalSection });
     }
 
+    // ?debug=scrape のときは detail=1 ページの診断情報を返す（前走情報調査用）
+    if (req.nextUrl.searchParams.get('debug') === 'scrape') {
+      const { extractRaceId, diagnoseDetailDenma } = await import('@/lib/scrapeRaceData');
+      const raceId = extractRaceId(url);
+      const diagnosis = raceId ? await diagnoseDetailDenma(raceId) : { error: 'raceId の抽出に失敗' };
+      return NextResponse.json({ raceId, diagnosis });
+    }
+
     const modelParam = req.nextUrl.searchParams.get('model') ?? DEFAULT_MODEL;
     const GEMINI_MODEL = (ALLOWED_MODELS as readonly string[]).includes(modelParam) ? modelParam : DEFAULT_MODEL;
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);

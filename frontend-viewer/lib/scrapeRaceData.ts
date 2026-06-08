@@ -32,6 +32,16 @@ async function fetchHtml(url: string): Promise<string> {
   return res.text();
 }
 
+/** "レーベンスティール 牡6/鹿毛" → "レーベンスティール"（性齢・毛色のサフィックスを除去） */
+function cleanHorseName(raw: string): string {
+  return raw.replace(/\s+(?:牡|牝|せん|騸)\d+.*$/, '').trim();
+}
+
+/** "戸崎 圭太58.0" → "戸崎 圭太"（斤量の数値を除去） */
+function cleanJockeyName(raw: string): string {
+  return raw.replace(/\s*\d+\.\d+$/, '').trim();
+}
+
 // "496(+4)" "496(-14)" "496(0)" "496(-)" に対応
 function parseWeight(s: string): { weight: number | null; weightDiff: number | null } {
   const withSign = s.match(/(\d{3,4})\(([+-]\d+)\)/);
@@ -132,13 +142,17 @@ async function fetchBasicDenma(raceId: string): Promise<{
 
       // 馬名・騎手・馬体重: colMap 優先、なければ馬番列からの相対位置で取得
       // 列構成: 枠(0), 馬番(1), 馬名(2), 性齢(3), 騎手(4), 斤量(5), 調教師(6), 父(7), 母(8), 馬体重(9), 人気(10)
-      const horseName = ('horseName' in colMap)
-        ? (texts[colMap.horseName] ?? '')
-        : (hnCol + 1 < texts.length ? texts[hnCol + 1] : '');
+      const horseName = cleanHorseName(
+        ('horseName' in colMap)
+          ? (texts[colMap.horseName] ?? '')
+          : (hnCol + 1 < texts.length ? texts[hnCol + 1] : '')
+      );
 
-      const jockey = ('jockey' in colMap)
-        ? (texts[colMap.jockey] ?? '')
-        : (hnCol + 3 < texts.length ? texts[hnCol + 3] : '');
+      const jockey = cleanJockeyName(
+        ('jockey' in colMap)
+          ? (texts[colMap.jockey] ?? '')
+          : (hnCol + 3 < texts.length ? texts[hnCol + 3] : '')
+      );
 
       const weightRaw = ('weight' in colMap)
         ? (texts[colMap.weight] ?? '')
@@ -296,6 +310,75 @@ function buildSection(
   }
 
   return lines.join('\n');
+}
+
+/**
+ * detail=1 ページの取得状況を診断して返す（デバッグ用）。
+ * テーブル数・colMap の検出結果・先頭5行のサンプルを含む。
+ */
+export async function diagnoseDetailDenma(raceId: string): Promise<{
+  httpStatus: number | null;
+  httpError: string | null;
+  tablesFound: number;
+  targetTableFound: boolean;
+  colMapDetected: Record<string, number>;
+  headerCandidates: string[][];
+  sampleDataRows: string[][];
+}> {
+  try {
+    const res = await fetch(`${YAHOO_BASE}/denma/${raceId}?detail=1`, {
+      headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'ja,en-US;q=0.7,en;q=0.3',
+      },
+      cache: 'no-store',
+    });
+    const httpStatus = res.status;
+    if (!res.ok) {
+      return { httpStatus, httpError: `HTTP ${res.status}`, tablesFound: 0, targetTableFound: false, colMapDetected: {}, headerCandidates: [], sampleDataRows: [] };
+    }
+
+    const html = await res.text();
+    const root = parse(html);
+    const tables = root.querySelectorAll('table');
+
+    let targetTableFound = false;
+    let colMapDetected: Record<string, number> = {};
+    const headerCandidates: string[][] = [];
+    const sampleDataRows: string[][] = [];
+
+    for (const table of tables) {
+      const rows = table.querySelectorAll('tr');
+      if (rows.length < 2) continue;
+
+      // 先頭3行のテキストをサンプルとして収集
+      for (let i = 0; i < Math.min(3, rows.length); i++) {
+        const cells = rows[i].querySelectorAll('th, td');
+        if (cells.length > 0) {
+          headerCandidates.push(cells.map(c => c.text.trim().slice(0, 30)));
+        }
+      }
+
+      const colMap = detectColMap(rows);
+      if ('horseNum' in colMap) {
+        targetTableFound = true;
+        colMapDetected = colMap;
+        // 最初のデータ行を数件取得
+        for (const row of rows) {
+          const tds = row.querySelectorAll('td');
+          if (tds.length < 3) continue;
+          sampleDataRows.push(tds.map(c => c.text.trim().slice(0, 30)));
+          if (sampleDataRows.length >= 5) break;
+        }
+        break;
+      }
+    }
+
+    return { httpStatus, httpError: null, tablesFound: tables.length, targetTableFound, colMapDetected, headerCandidates: headerCandidates.slice(0, 5), sampleDataRows };
+  } catch (e) {
+    return { httpStatus: null, httpError: String(e), tablesFound: 0, targetTableFound: false, colMapDetected: {}, headerCandidates: [], sampleDataRows: [] };
+  }
 }
 
 /**
