@@ -221,13 +221,19 @@ async function mergeDetailDenma(raceId: string, horses: Map<string, HorseInfo>):
     const tds = table2Rows[i].querySelectorAll('td');
     if (tds.length <= prevRaceCol) continue;
 
-    const cellText = tds[prevRaceCol].text.trim().replace(/\s+/g, ' ');
-    // 実フォーマット: "2026/04/05 阪神 芝・右2000m 良 6大阪杯GI 492(+8)..."
-    // トラック状態（良/稍重/重/不良）の直後に「着順+レース名略称」が続く
-    const raceInfoMatch = cellText.match(/(?:良|稍重|重|不良)\s+(\d{1,2})([^\d\s（）()]{2,})/);
-    if (raceInfoMatch) {
-      info.prevRaceResult = raceInfoMatch[1] + '着';
-      info.prevRaceName = raceInfoMatch[2];
+    const cell = tds[prevRaceCol];
+    // CSS クラスで確実に取得（トラック状態の表記ゆれに依存しない）
+    // 着順: <span class="hr-denma__arrival ...">N</span>
+    const arrival = cell.querySelector('.hr-denma__arrival')?.text.trim();
+    if (arrival && /^\d{1,2}$/.test(arrival)) {
+      info.prevRaceResult = arrival + '着';
+    }
+    // レース名: .hr-denma__race 内の <a> タグ
+    const raceName = cell.querySelector('.hr-denma__race a')?.text.trim() ?? '';
+    // グレード: <span class="hr-label ...">GI/GII/GIII</span>
+    const grade = cell.querySelector('[class*="hr-label"]')?.text.trim() ?? '';
+    if (raceName) {
+      info.prevRaceName = raceName + grade;
     }
     found++;
   }
