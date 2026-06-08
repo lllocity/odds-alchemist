@@ -171,64 +171,83 @@ async function fetchBasicDenma(raceId: string): Promise<{
   return { raceDistance, horses, nameToNumber };
 }
 
-/** 詳細出馬表（detail=1）から前走情報を取得してマージ */
+/**
+ * 詳細出馬表（detail=1）から前走情報を取得してマージ。
+ *
+ * ページは2テーブル構造:
+ *   テーブル1: 馬エントリ行（2列）  row_i → horse i+1
+ *   テーブル2: 詳細行（6列）        row0=サブヘッダ、row_i → horse i+1 の前走データ
+ */
 async function mergeDetailDenma(raceId: string, horses: Map<string, HorseInfo>): Promise<void> {
   const html = await fetchHtml(`${YAHOO_BASE}/denma/${raceId}?detail=1`);
   const root = parse(html);
+  const tables = root.querySelectorAll('table');
+  if (tables.length < 2) return;
 
-  for (const table of root.querySelectorAll('table')) {
-    const rows = table.querySelectorAll('tr');
-    if (rows.length < 3) continue;
+  // テーブル1から馬番を出現順に収集
+  const horseNumbersInOrder: string[] = [];
+  for (const row of tables[0].querySelectorAll('tr')) {
+    const tds = row.querySelectorAll('td');
+    if (tds.length < 2) continue;
+    const cell0 = tds[0].text.replace(/\s+/g, ' ').trim();
+    // "1 1" や "1 2" → 末尾の数字が馬番
+    const nums = cell0.match(/\d+/g);
+    if (nums) horseNumbersInOrder.push(nums[nums.length - 1]);
+  }
+  if (horseNumbersInOrder.length === 0) return;
 
-    const colMap = detectColMap(rows);
-    if (!('horseNum' in colMap)) continue;
+  // テーブル2: row0 がサブヘッダ、row1+ が各馬の詳細（同順）
+  const table2Rows = tables[1].querySelectorAll('tr');
 
-    for (const row of rows) {
-      const tds = row.querySelectorAll('td');
-      if (tds.length < 4) continue;
-      const texts = tds.map(c => c.text.trim().replace(/\s+/g, ' '));
+  // サブヘッダから「前走」列のインデックスを特定
+  let prevRaceCol = 1;
+  if (table2Rows.length > 0) {
+    const subHeaderTexts = [...table2Rows[0].querySelectorAll('td, th')]
+      .map(c => c.text.trim().replace(/\s+/g, ''));
+    const idx = subHeaderTexts.findIndex(
+      t => t === '前走' || (t.includes('前走') && !t.includes('前々') && !/[2-6]前/.test(t))
+    );
+    if (idx >= 0) prevRaceCol = idx;
+  }
 
-      let hnCol: number;
-      if ('horseNum' in colMap) {
-        hnCol = colMap.horseNum;
-      } else {
-        hnCol = texts.findIndex((t, i) => i < 3 && /^\d{1,2}$/.test(t) && +t >= 1 && +t <= 18);
-      }
-      if (hnCol < 0) continue;
+  let found = 0;
+  for (let i = 1; i < table2Rows.length; i++) {
+    const horseIdx = i - 1;
+    if (horseIdx >= horseNumbersInOrder.length) break;
 
-      const info = horses.get(texts[hnCol] ?? '');
-      if (!info) continue;
+    const info = horses.get(horseNumbersInOrder[horseIdx]);
+    if (!info) continue;
 
-      // 前走レース・着順: colMap 優先、なければ相対位置（馬番+5, 馬番+6）
-      // 列構成: 馬番(0), 馬名(1), 馬体重(2), 騎手(3), 斤量(4), 前走レース(5), 前走着順(6)
-      if ('prevRace' in colMap && texts[colMap.prevRace]) info.prevRaceName = texts[colMap.prevRace];
-      if ('prevResult' in colMap && texts[colMap.prevResult]) info.prevRaceResult = texts[colMap.prevResult];
+    const tds = table2Rows[i].querySelectorAll('td');
+    if (tds.length <= prevRaceCol) continue;
 
-      if (!info.prevRaceName && hnCol + 5 < texts.length) {
-        const candidate = texts[hnCol + 5];
-        if (candidate && candidate.length >= 3 && !candidate.includes('着') && !/^\d/.test(candidate)) {
-          info.prevRaceName = candidate;
-        }
-      }
-      if (!info.prevRaceResult && hnCol + 6 < texts.length) {
-        const candidate = texts[hnCol + 6];
-        if (candidate && /^\d{1,2}着$/.test(candidate)) info.prevRaceResult = candidate;
-      }
-
-      // フォールバック: テキストパターンスキャン
-      if (!info.prevRaceResult || !info.prevRaceName) {
-        for (const t of texts) {
-          if (!info.prevRaceResult && /^\d{1,2}着$/.test(t)) info.prevRaceResult = t;
-          if (!info.prevRaceName && t.length >= 4 && !t.includes('着') && !/^\d/.test(t)) {
-            if (/\(G[I123V]+\)/.test(t) || (/[ァ-ヶ一-龥]/.test(t) && /[杯典賞Cカップ]/.test(t))) {
-              info.prevRaceName = t;
-            }
-          }
-        }
-      }
+    const cellText = tds[prevRaceCol].text.trim().replace(/\s+/g, ' ');
+    // "2026/04/05 阪神 大阪杯(GI) 12着" のような形式
+    const resultMatch = cellText.match(/(\d{1,2}着)/);
+    if (resultMatch) {
+      info.prevRaceResult = resultMatch[0];
+      // 日付を除いた残りからレース名を抽出
+      const noDate = cellText.replace(/\d{4}\/\d{2}\/\d{2}\s*/, '').trim();
+      const noResult = noDate.replace(/\s*\d{1,2}着.*$/, '').trim();
+      if (noResult.length >= 2) info.prevRaceName = noResult;
     }
+    found++;
+  }
 
-    if ([...horses.values()].some(h => h.prevRaceResult || h.prevRaceName)) break;
+  // フォールバック: 旧パターン（テーブル構造が変わった場合）
+  if (found === 0) {
+    for (const table of tables) {
+      for (const row of table.querySelectorAll('tr')) {
+        const tds = row.querySelectorAll('td');
+        if (tds.length < 5) continue;
+        const texts = tds.map(c => c.text.trim().replace(/\s+/g, ' '));
+        for (const t of texts) {
+          // パターンマッチで "N着" を含む行を探して近くの馬情報と紐付けを試みる
+          if (/^\d{1,2}着$/.test(t)) found++;
+        }
+      }
+      if (found > 0) break;
+    }
   }
 }
 
@@ -324,6 +343,7 @@ export async function diagnoseDetailDenma(raceId: string): Promise<{
   colMapDetected: Record<string, number>;
   headerCandidates: string[][];
   sampleDataRows: string[][];
+  table2Preview: string[][];
 }> {
   try {
     const res = await fetch(`${YAHOO_BASE}/denma/${raceId}?detail=1`, {
@@ -336,7 +356,7 @@ export async function diagnoseDetailDenma(raceId: string): Promise<{
     });
     const httpStatus = res.status;
     if (!res.ok) {
-      return { httpStatus, httpError: `HTTP ${res.status}`, tablesFound: 0, targetTableFound: false, colMapDetected: {}, headerCandidates: [], sampleDataRows: [] };
+      return { httpStatus, httpError: `HTTP ${res.status}`, tablesFound: 0, targetTableFound: false, colMapDetected: {}, headerCandidates: [], sampleDataRows: [], table2Preview: [] };
     }
 
     const html = await res.text();
@@ -352,11 +372,11 @@ export async function diagnoseDetailDenma(raceId: string): Promise<{
       const rows = table.querySelectorAll('tr');
       if (rows.length < 2) continue;
 
-      // 先頭3行のテキストをサンプルとして収集
+      // 先頭3行のテキストをサンプルとして収集（100字まで）
       for (let i = 0; i < Math.min(3, rows.length); i++) {
         const cells = rows[i].querySelectorAll('th, td');
         if (cells.length > 0) {
-          headerCandidates.push(cells.map(c => c.text.trim().slice(0, 30)));
+          headerCandidates.push(cells.map(c => c.text.trim().replace(/\s+/g, ' ').slice(0, 100)));
         }
       }
 
@@ -368,16 +388,26 @@ export async function diagnoseDetailDenma(raceId: string): Promise<{
         for (const row of rows) {
           const tds = row.querySelectorAll('td');
           if (tds.length < 3) continue;
-          sampleDataRows.push(tds.map(c => c.text.trim().slice(0, 30)));
+          sampleDataRows.push(tds.map(c => c.text.trim().replace(/\s+/g, ' ').slice(0, 100)));
           if (sampleDataRows.length >= 5) break;
         }
         break;
       }
     }
 
-    return { httpStatus, httpError: null, tablesFound: tables.length, targetTableFound, colMapDetected, headerCandidates: headerCandidates.slice(0, 5), sampleDataRows };
+    // テーブル2の前走列の実際の内容を確認するための追加診断
+    const table2Preview: string[][] = [];
+    if (tables.length >= 2) {
+      const t2rows = tables[1].querySelectorAll('tr');
+      for (let i = 0; i < Math.min(4, t2rows.length); i++) {
+        const cells = t2rows[i].querySelectorAll('td, th');
+        table2Preview.push(cells.map(c => c.text.trim().replace(/\s+/g, ' ').slice(0, 100)));
+      }
+    }
+
+    return { httpStatus, httpError: null, tablesFound: tables.length, targetTableFound, colMapDetected, headerCandidates: headerCandidates.slice(0, 5), sampleDataRows, table2Preview };
   } catch (e) {
-    return { httpStatus: null, httpError: String(e), tablesFound: 0, targetTableFound: false, colMapDetected: {}, headerCandidates: [], sampleDataRows: [] };
+    return { httpStatus: null, httpError: String(e), tablesFound: 0, targetTableFound: false, colMapDetected: {}, headerCandidates: [], sampleDataRows: [], table2Preview: [] };
   }
 }
 
