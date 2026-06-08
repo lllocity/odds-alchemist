@@ -106,12 +106,13 @@ async function fetchBasicDenma(raceId: string): Promise<{
   const html = await fetchHtml(`${YAHOO_BASE}/denma/${raceId}`);
   const root = parse(html);
 
-  // ページ全文からレース距離を抽出（複数パターンに対応）
+  // ページ全文からレース距離を抽出
+  // 実フォーマット: "芝・左1600m" "芝・右・外2000m" "ダート・左1600m" など方向記号が挟まる
   const text = root.text;
-  const distanceMatch =
-    text.match(/[芝ダ]\s*[1-9]\d{3}\s*[mｍ]/) ||
-    text.match(/[1-9]\d{3}\s*[mｍ][（(][芝ダ]/);
-  const raceDistance = (distanceMatch?.[0] ?? '').replace(/\s+/g, '').replace('ｍ', 'm');
+  const grassMatch = text.match(/芝[^\d\s]*([1-9]\d{3})[mｍ]/);
+  const dirtMatch  = text.match(/(?:ダート|ダ)[^\d\s]*([1-9]\d{3})[mｍ]/);
+  const raceDistance = grassMatch ? `芝${grassMatch[1]}m` :
+                       dirtMatch  ? `ダ${dirtMatch[1]}m` : '';
 
   const horses = new Map<string, HorseInfo>();
   const nameToNumber = new Map<string, string>();
