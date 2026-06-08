@@ -222,14 +222,12 @@ async function mergeDetailDenma(raceId: string, horses: Map<string, HorseInfo>):
     if (tds.length <= prevRaceCol) continue;
 
     const cellText = tds[prevRaceCol].text.trim().replace(/\s+/g, ' ');
-    // "2026/04/05 阪神 大阪杯(GI) 12着" のような形式
-    const resultMatch = cellText.match(/(\d{1,2}着)/);
-    if (resultMatch) {
-      info.prevRaceResult = resultMatch[0];
-      // 日付を除いた残りからレース名を抽出
-      const noDate = cellText.replace(/\d{4}\/\d{2}\/\d{2}\s*/, '').trim();
-      const noResult = noDate.replace(/\s*\d{1,2}着.*$/, '').trim();
-      if (noResult.length >= 2) info.prevRaceName = noResult;
+    // 実フォーマット: "2026/04/05 阪神 芝・右2000m 良 6大阪杯GI 492(+8)..."
+    // トラック状態（良/稍重/重/不良）の直後に「着順+レース名略称」が続く
+    const raceInfoMatch = cellText.match(/(?:良|稍重|重|不良)\s+(\d{1,2})([^\d\s（）()]{2,})/);
+    if (raceInfoMatch) {
+      info.prevRaceResult = raceInfoMatch[1] + '着';
+      info.prevRaceName = raceInfoMatch[2];
     }
     found++;
   }
