@@ -107,10 +107,11 @@ async function fetchBasicDenma(raceId: string): Promise<{
   const root = parse(html);
 
   // ページ全文からレース距離を抽出
-  // 実フォーマット: "芝・左1600m" "芝・右・外2000m" "ダート・左1600m" など方向記号が挟まる
+  // 実フォーマット: "芝・左 1600m" "芝・右・外 2000m" "ダート・左 1600m" など
+  // 方向記号とスペースが挟まるため [^\d]* で空白も含めてスキップする
   const text = root.text;
-  const grassMatch = text.match(/芝[^\d\s]*([1-9]\d{3})[mｍ]/);
-  const dirtMatch  = text.match(/(?:ダート|ダ)[^\d\s]*([1-9]\d{3})[mｍ]/);
+  const grassMatch = text.match(/芝[^\d]*([1-9]\d{3})[mｍ]/);
+  const dirtMatch  = text.match(/(?:ダート|ダ)[^\d]*([1-9]\d{3})[mｍ]/);
   const raceDistance = grassMatch ? `芝${grassMatch[1]}m` :
                        dirtMatch  ? `ダ${dirtMatch[1]}m` : '';
 
@@ -261,12 +262,22 @@ async function fetchDistanceStats(
   raceId: string,
   raceDistance: string,
   nameToNumber: Map<string, string>
-): Promise<Map<string, DistanceStat>> {
-  const result = new Map<string, DistanceStat>();
-  if (!raceDistance) return result;
+): Promise<{ stats: Map<string, DistanceStat>; resolvedDistance: string }> {
+  const stats = new Map<string, DistanceStat>();
 
   const html = await fetchHtml(`${YAHOO_BASE}/achievement/distance/${raceId}`);
   const root = parse(html);
+
+  // ページ全文から距離を抽出（基本出馬表で取れなかった場合のフォールバック）
+  // "芝・左 1600m" "ダート・左 1600m" のようにスペースが入るため [^\d]* を使う
+  let effectiveDistance = raceDistance;
+  if (!effectiveDistance) {
+    const text = root.text;
+    const gm = text.match(/芝[^\d]*([1-9]\d{3})[mｍ]/);
+    const dm = text.match(/(?:ダート|ダ)[^\d]*([1-9]\d{3})[mｍ]/);
+    if (gm) effectiveDistance = `芝${gm[1]}m`;
+    else if (dm) effectiveDistance = `ダ${dm[1]}m`;
+  }
 
   // achievement/distance は「枠番・馬番・馬名・芝1400m・芝1600m・...」の1テーブル構造
   for (const table of root.querySelectorAll('table')) {
@@ -274,8 +285,19 @@ async function fetchDistanceStats(
     if (rows.length < 3) continue;
 
     const colMap = detectColMap(rows);
-    const distCol = colMap[raceDistance] ?? -1;
-    if (!('horseNum' in colMap) || distCol < 0) continue;
+    if (!('horseNum' in colMap)) continue;
+
+    // テーブルヘッダーの距離キー一覧から effectiveDistance と一致するものを探す
+    // 一致しない場合はヘッダーにある最初の距離キーをフォールバックとして使う
+    const distanceKeys = Object.keys(colMap).filter(k => /^[芝ダ][1-9]\d{3}m$/.test(k));
+    if (distanceKeys.length === 0) continue;
+    const targetDist = distanceKeys.includes(effectiveDistance)
+      ? effectiveDistance
+      : distanceKeys[0];
+    const distCol = colMap[targetDist];
+    if (distCol === undefined) continue;
+
+    effectiveDistance = targetDist; // 実際に使った距離で上書き
 
     for (const row of rows) {
       const tds = row.querySelectorAll('td');
@@ -288,16 +310,16 @@ async function fetchDistanceStats(
         const nameText = 'horseName' in colMap ? texts[colMap.horseName] : '';
         hn = nameToNumber.get(nameText) ?? '';
       }
-      if (!hn || result.has(hn)) continue;
+      if (!hn || stats.has(hn)) continue;
 
       const stat = parseStat(texts[distCol] ?? '');
-      if (stat) result.set(hn, stat);
+      if (stat) stats.set(hn, stat);
     }
 
-    if (result.size > 0) break;
+    if (stats.size > 0) break;
   }
 
-  return result;
+  return { stats, resolvedDistance: effectiveDistance };
 }
 
 /** プロンプト用の出馬表情報セクションを生成 */
@@ -429,17 +451,19 @@ export async function fetchSupplementalSection(oddsUrl: string): Promise<string>
     const { raceDistance, horses, nameToNumber } = await fetchBasicDenma(raceId);
     if (horses.size === 0) return '';
 
-    const [distanceStats] = await Promise.all([
+    const [distanceResult] = await Promise.all([
       fetchDistanceStats(raceId, raceDistance, nameToNumber).catch(e => {
         console.warn('距離別成績の取得に失敗しました', e);
-        return new Map<string, DistanceStat>();
+        return { stats: new Map<string, DistanceStat>(), resolvedDistance: raceDistance };
       }),
       mergeDetailDenma(raceId, horses).catch(e => {
         console.warn('詳細出馬表の取得に失敗しました', e);
       }),
     ]);
 
-    return buildSection(raceDistance, horses, distanceStats);
+    // fetchDistanceStats でページから距離が解決できた場合はそちらを優先
+    const finalDistance = distanceResult.resolvedDistance || raceDistance;
+    return buildSection(finalDistance, horses, distanceResult.stats);
   } catch (e) {
     console.warn('出馬表スクレイピングに失敗しました', e);
     return '';
